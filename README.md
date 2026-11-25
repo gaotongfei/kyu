@@ -1,5 +1,17 @@
 # Kyu
 
+## Local development
+
+Use the Node.js version in `.nvmrc`, Yarn 4 (via Corepack), and Docker with Compose.
+
+```sh
+yarn install
+cp .env.example .env
+docker compose up -d --wait
+yarn db:migrate
+yarn dev
+```
+
 ## npm scripts
 
 ### Build and dev scripts
