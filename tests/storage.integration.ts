@@ -9,8 +9,9 @@ import {
   saveResume,
 } from '../app/resumes/storage';
 
-if (process.env.RESUME_TEST_DATABASE !== 'isolated')
+if (process.env.RESUME_TEST_DATABASE !== 'isolated') {
   throw new Error('Run only against an isolated database with RESUME_TEST_DATABASE=isolated.');
+}
 const ids: string[] = [];
 const input = {
   name: 'Integration resume',
@@ -23,7 +24,9 @@ const input = {
 after(async () => {
   for (const id of ids) {
     const row = await getResume(id).catch(() => null);
-    if (row) await deleteResume(id, row.version);
+    if (row) {
+      await deleteResume(id, row.version);
+    }
   }
   const globalDb = globalThis as unknown as { postgresClient: { end: () => Promise<void> } };
   await globalDb.postgresClient.end();

@@ -50,9 +50,13 @@ export function validateInput(input: ResumeInput): ResumeInput {
   const ids = new Set<string>();
   let size = 0;
   for (const section of input.sections) {
-    if (!section || typeof section !== 'object') throw new ResumeError('Invalid section.');
+    if (!section || typeof section !== 'object') {
+      throw new ResumeError('Invalid section.');
+    }
     validId(section.id);
-    if (ids.has(section.id)) throw new ResumeError('Section IDs must be unique.');
+    if (ids.has(section.id)) {
+      throw new ResumeError('Section IDs must be unique.');
+    }
     ids.add(section.id);
     if (
       typeof section.titleMarkdown !== 'string' ||
@@ -64,7 +68,9 @@ export function validateInput(input: ResumeInput): ResumeInput {
     }
     size += section.titleMarkdown.length + section.contentMarkdown.length;
   }
-  if (size > 500_000) throw new ResumeError('A resume can contain at most 500,000 characters.');
+  if (size > 500_000) {
+    throw new ResumeError('A resume can contain at most 500,000 characters.');
+  }
   return {
     name: input.name.trim(),
     themeKey: 'classic',

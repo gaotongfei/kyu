@@ -25,7 +25,9 @@ export async function listResumes() {
 export async function getResume(id: string) {
   validId(id);
   const [row] = await db.select().from(resumes).where(eq(resumes.id, id));
-  if (!row) throw new ResumeError('This resume no longer exists.');
+  if (!row) {
+    throw new ResumeError('This resume no longer exists.');
+  }
   return document(row);
 }
 
@@ -46,11 +48,12 @@ export async function saveResume(id: string, version: number, input: ResumeInput
     })
     .where(and(eq(resumes.id, id), eq(resumes.version, version)))
     .returning();
-  if (!row)
+  if (!row) {
     throw new ResumeError(
       'This resume changed in another tab or was deleted. Your edits are still here. Export your local Markdown before reloading.',
       true
     );
+  }
   return document(row);
 }
 
@@ -61,9 +64,10 @@ export async function deleteResume(id: string, version: number) {
     .delete(resumes)
     .where(and(eq(resumes.id, id), eq(resumes.version, version)))
     .returning({ id: resumes.id });
-  if (!rows.length)
+  if (!rows.length) {
     throw new ResumeError(
       'This resume changed in another tab. It has not been deleted. Reload before trying again.',
       true
     );
+  }
 }

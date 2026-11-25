@@ -6,7 +6,13 @@ const withBundleAnalyzer = bundleAnalyzer({
 
 export default withBundleAnalyzer({
   reactStrictMode: false,
+  serverExternalPackages: ['@react-pdf/renderer', 'unpdf'],
+  outputFileTracingIncludes: {
+    '/resumes/*/pdf': ['./app/resumes/fonts/**/*'],
+  },
   experimental: {
+    serverActions: { bodySizeLimit: '2mb' },
     optimizePackageImports: ['@mantine/core', '@mantine/hooks'],
   },
+
 });
