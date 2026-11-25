@@ -32,7 +32,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         error:
           error instanceof ResumeError
             ? error.message
-            : 'The PDF could not be generated. Check PostgreSQL and retry.',
+            : 'The PDF could not be generated. Retry, or check the server configuration and resume content.',
       },
       { status: 500, headers }
     );

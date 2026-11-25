@@ -5,26 +5,25 @@ export const MAX_PDF_BYTES = 10 * 1024 * 1024;
 export const MAX_PDF_PAGES = 20;
 
 function escapeMarkdown(value: string) {
-  // PDF text is not Markdown source: prevent inferred headings/lists, active links,
-  // image requests, and HTML when the draft is subsequently previewed.
-  return value.replace(/[\\`*_{}\[\]()<>#+\-.!|~]/g, '\\$&');
+  // Imported text stays literal; see kyu-resume-editor SPEC.md.
+  return value.replace(/[\\`*_{}[\]()<>#+\-.!|~:&@]/g, '\\$&');
 }
 
 export async function extractPdfDraft(
   bytes: Uint8Array
 ): Promise<{ markdown: string; warnings: string[]; pages: number }> {
-  if (bytes.byteLength > MAX_PDF_BYTES) {throw new Error('PDF files must be 10 MiB or smaller.');}
+  if (bytes.byteLength > MAX_PDF_BYTES) {
+    throw new Error('PDF files must be 10 MiB or smaller.');
+  }
   if (
     bytes.byteLength < 8 ||
-    !/^%PDF-\d\.\d/.test(Buffer.from(bytes.subarray(0, 8)).toString('ascii'))
+    !/^%PDF-\d\.\d/.test(Buffer.from(bytes.subarray(0, 8)).toString('latin1'))
   ) {
     throw new Error('Invalid PDF: the file does not have a PDF signature.');
   }
 
   const { getDocument } = await getResolvedPDFJS();
-  // Use unpdf's bundled, local PDF.js build. Supplying bytes (not a URL) and no
-  // CMap/font/worker URLs prevents uploaded content from choosing fetch targets.
-  // Keep the loading task so even password/parse failures release PDF.js resources.
+  // Local-only extraction and resource lifecycle: kyu-resume-editor SPEC.md.
   const task = getDocument({
     data: new Uint8Array(bytes), // PDF.js can transfer/detach its input; preserve the caller's bytes.
     verbosity: 0,
@@ -36,14 +35,14 @@ export async function extractPdfDraft(
   });
   try {
     const pdf = await task.promise;
-    // Non-null permissions also detect owner-encrypted PDFs with an empty user
-    // password, which do not trigger PDF.js's PasswordException. Metadata is a
-    // second independent signal (Standard / other encryption filters).
+    // Empty-user-password encryption need not raise PasswordException.
     const [permissions, metadata] = await Promise.all([pdf.getPermissions(), getMeta(pdf)]);
     if (permissions !== null || metadata.info.EncryptFilterName) {
       throw new Error('Encrypted PDFs are not supported. Export an unencrypted PDF and try again.');
     }
-    if (pdf.numPages > MAX_PDF_PAGES) {throw new Error('PDF files must contain at most 20 pages.');}
+    if (pdf.numPages > MAX_PDF_PAGES) {
+      throw new Error('PDF files must contain at most 20 pages.');
+    }
 
     const { text } = await extractText(pdf, { mergePages: false });
     const pages = text.map((page) =>
@@ -80,7 +79,9 @@ export async function extractPdfDraft(
           'Encrypted PDFs are not supported. Export an unencrypted PDF and try again.'
         );
       }
-      if (/at most 20 pages|no extractable text/.test(error.message)) {throw error;}
+      if (/at most 20 pages|no extractable text/.test(error.message)) {
+        throw error;
+      }
     }
     // Do not expose parser details, which can include uploaded document contents.
     throw new Error('Invalid or unreadable PDF. Export a new text-based PDF and try again.');

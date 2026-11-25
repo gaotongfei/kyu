@@ -10,6 +10,11 @@ async function upload(name: string, contents: Uint8Array | string) {
   );
   return POST(new Request('http://localhost/resumes/import', { method: 'POST', body: form }));
 }
+test('Next automatic development logging cannot serialize private server-action arguments', async () => {
+  const { default: config } = await import('../next.config.mjs');
+  assert.equal(config.logging, false);
+});
+
 test('Markdown import returns a draft, not a persisted document', async () => {
   const response = await upload('Imported.md', '# Name\n\n## Work\n**Engineer**\n');
   assert.equal(response.status, 200);

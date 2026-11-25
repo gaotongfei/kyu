@@ -15,11 +15,15 @@ import {
 import { Lexer, type Token } from 'marked';
 import type { Resume } from './model';
 
+// Renderer-only alias for the unmodified Lato faces, not a custom-designed font.
+// Attribution and license: fonts/OFL.txt.
 const FAMILY = 'Kyu Classic Lato';
 let fontsRegistered = false;
 
 function registerFonts() {
-  if (fontsRegistered) {return;}
+  if (fontsRegistered) {
+    return;
+  }
   // Explicit local reads also let Next's output tracing discover the bundled assets.
   const source = (file: string) =>
     `data:font/ttf;base64,${readFileSync(join(process.cwd(), 'app/resumes/fonts', file)).toString('base64')}`;
@@ -32,18 +36,28 @@ function registerFonts() {
       { src: source('Lato-BoldItalic.ttf'), fontWeight: 700, fontStyle: 'italic' },
     ],
   });
+  // Replace React PDF's default English-pattern hyphenation with our overflow policy.
   Font.registerHyphenationCallback(hyphenate);
   fontsRegistered = true;
 }
 
-// Keep normal words intact; permit emergency wrapping of URLs/identifiers rather
-// than clipping them or shrinking the whole document. Segment on grapheme boundaries.
+// Graphemes keep combining accents and joined emoji together; 'en' does not limit
+// input to English. This is character segmentation, not language-specific syllables.
 const graphemes = new Intl.Segmenter('en', { granularity: 'grapheme' });
+
+// Overflow heuristic (kyu-resume-editor SPEC.md), not dictionary hyphenation:
+// keep tokens of <=24 graphemes whole; longer tokens offer breaks every 12.
+// React PDF chooses breaks to fit the line and can add a visible hyphen.
+// This is not Chinese/Japanese line-breaking support; Lato also lacks CJK glyphs.
 function hyphenate(word: string) {
   const letters = Array.from(graphemes.segment(word), (part) => part.segment);
-  if (letters.length <= 24) {return [word];}
+  if (letters.length <= 24) {
+    return [word];
+  }
   const parts: string[] = [];
-  for (let i = 0; i < letters.length; i += 12) {parts.push(letters.slice(i, i + 12).join(''));}
+  for (let i = 0; i < letters.length; i += 12) {
+    parts.push(letters.slice(i, i + 12).join(''));
+  }
   return parts;
 }
 
@@ -90,7 +104,9 @@ function text(value: string) {
     mdash: '—',
   };
   return value.replace(/&(#x[\da-f]+|#\d+|[a-z]+);/gi, (whole, entity: string) => {
-    if (!entity.startsWith('#')) {return named[entity.toLowerCase()] ?? whole;}
+    if (!entity.startsWith('#')) {
+      return named[entity.toLowerCase()] ?? whole;
+    }
     const point =
       entity[1].toLowerCase() === 'x'
         ? parseInt(entity.slice(2), 16)
@@ -103,8 +119,12 @@ function text(value: string) {
 
 function safeHref(href: string): string | null {
   const decoded = text(href);
-  if (/[\u0000-\u0020\u007f]/.test(decoded) || !/^(https?:\/\/|mailto:)/i.test(decoded))
-    {return null;}
+  const hasControls = Array.from(decoded).some(
+    (character) => character.charCodeAt(0) <= 32 || character.charCodeAt(0) === 127
+  );
+  if (hasControls || !/^(https?:\/\/|mailto:)/i.test(decoded)) {
+    return null;
+  }
   try {
     const url = new URL(decoded);
     return ['https:', 'http:', 'mailto:'].includes(url.protocol) ? url.href : null;
@@ -129,7 +149,7 @@ export async function renderResumePdf(
       checkbox: 'Task lists',
     }[token.type];
     warnings.add(
-      `${label ?? `Markdown token “${token.type}”`} is not supported in Classic PDF; its source is displayed as text.`
+      `${label ?? `Markdown token “${token.type}”`}: unsupported in Classic PDF; its source is displayed as text.`
     );
     return token.raw || ('text' in token ? String(token.text) : '');
   };
@@ -138,7 +158,9 @@ export async function renderResumePdf(
     return tokens.map((token, i) => {
       switch (token.type) {
         case 'text':
-          return token.tokens ? inline(token.tokens, insideLink) : text(token.text);
+          return token.tokens
+            ? inline(token.tokens, insideLink)
+            : text(token.text).replace(/\n/g, ' ');
         case 'escape':
           return token.text;
         case 'strong':
@@ -169,7 +191,9 @@ export async function renderResumePdf(
             );
             return token.raw;
           }
-          if (insideLink) {return inline(token.tokens, true);}
+          if (insideLink) {
+            return inline(token.tokens, true);
+          }
           return (
             <Link key={i} src={href} style={styles.link}>
               {inline(token.tokens, true)}
@@ -224,12 +248,13 @@ export async function renderResumePdf(
           return (
             <View key={i}>
               {(token.items as import('marked').Tokens.ListItem[]).map((item, index) => {
-                if (item.task)
-                  {return (
+                if (item.task) {
+                  return (
                     <Text key={index} style={styles.paragraph}>
                       {unsupported({ ...item, type: 'checkbox' })}
                     </Text>
-                  );}
+                  );
+                }
                 return (
                   <View key={index} style={styles.listItem}>
                     <Text style={styles.marker}>
@@ -251,14 +276,25 @@ export async function renderResumePdf(
     });
   }
 
+  const references = Object.assign(
+    Object.create(null),
+    ...resume.sections
+      .map((section) => new Lexer(options).lex(section.contentMarkdown).links)
+      .reverse()
+  );
+  function sectionLexer() {
+    const lexer = new Lexer(options);
+    lexer.tokens.links = Object.assign(Object.create(null), references);
+    return lexer;
+  }
   const content = resume.sections.map((section) => (
     <View key={section.id}>
       {section.titleMarkdown.trim() && (
         <Text style={styles.sectionTitle} minPresenceAhead={24}>
-          {inline(new Lexer(options).inlineTokens(section.titleMarkdown))}
+          {inline(sectionLexer().inlineTokens(section.titleMarkdown))}
         </Text>
       )}
-      {blocks(new Lexer(options).lex(section.contentMarkdown))}
+      {blocks(sectionLexer().lex(section.contentMarkdown))}
     </View>
   ));
   const buffer = await renderToBuffer(

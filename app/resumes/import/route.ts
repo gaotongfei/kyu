@@ -44,7 +44,15 @@ export async function POST(request: Request) {
       throw new Error('Files must be 10 MiB or smaller.');
     }
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const name = file.name.replace(/\.(md|pdf)$/i, '').slice(0, 120) || 'Imported resume';
+    const baseName = file.name.replace(/\.(md|pdf)$/i, '');
+    let name = '';
+    for (const character of baseName) {
+      if (name.length + character.length > 120) {
+        break;
+      }
+      name += character;
+    }
+    name ||= 'Imported resume';
     if (/\.pdf$/i.test(file.name)) {
       const draft = await extractPdfDraft(bytes);
       return Response.json(

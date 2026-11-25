@@ -1,0 +1,103 @@
+.pane {
+  min-width: 0;
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--kyu-space-2);
+  color: var(--kyu-text);
+}
+
+.heading h2 {
+  margin: 0;
+  font-size: var(--kyu-type-small);
+  font-weight: var(--kyu-weight-medium);
+}
+
+.heading span,
+.status,
+.fallback {
+  font-size: var(--kyu-type-caption);
+  color: var(--kyu-muted);
+}
+
+.status {
+  min-height: 2.5em;
+  margin-block: var(--kyu-space-2) var(--kyu-space-3);
+}
+
+.pdf {
+  display: block;
+  width: 100%;
+  height: 36rem;
+  border: var(--kyu-stroke) solid var(--kyu-border);
+  background: var(--kyu-paper);
+  color-scheme: light;
+}
+
+.placeholder {
+  min-height: 31rem;
+  padding: var(--kyu-space-6);
+  border: var(--kyu-stroke) solid var(--kyu-border);
+  color: var(--kyu-muted);
+  background: var(--kyu-panel);
+}
+
+.fallback {
+  line-height: var(--kyu-leading-reading);
+  overflow-wrap: anywhere;
+}
+
+.fallback a {
+  color: var(--kyu-accent);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.error {
+  color: var(--kyu-danger);
+  margin-bottom: var(--kyu-space-4);
+  overflow-wrap: anywhere;
+}
+
+.error button {
+  min-height: var(--kyu-control-height);
+  border: var(--kyu-stroke) solid var(--kyu-control-border);
+  border-radius: var(--kyu-radius-sm);
+  background: var(--kyu-panel);
+  color: var(--kyu-text);
+  cursor: pointer;
+  font: inherit;
+  padding-inline: var(--kyu-space-3);
+}
+
+.warning {
+  margin-top: var(--kyu-space-4);
+  padding: var(--kyu-space-3);
+  color: var(--kyu-warning);
+  background: var(--kyu-warning-soft);
+  font-size: var(--kyu-type-small);
+  overflow-wrap: anywhere;
+}
+
+.warning strong {
+  font-weight: var(--kyu-weight-medium);
+}
+
+.warning ul {
+  padding-left: var(--kyu-space-5);
+}
+
+.fallback a:focus-visible,
+.error button:focus-visible {
+  outline: var(--kyu-focus-width) solid var(--kyu-focus);
+  outline-offset: var(--kyu-focus-offset);
+}
+
+@media (max-width: 40.625rem) {
+  .pdf {
+    height: 32rem;
+  }
+}

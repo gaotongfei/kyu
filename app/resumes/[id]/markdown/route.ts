@@ -25,10 +25,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   } catch (error) {
     return Response.json(
       {
-        error:
-          error instanceof ResumeError
-            ? error.message
-            : 'Markdown could not be exported. Check PostgreSQL and retry.',
+        error: error instanceof ResumeError ? error.message : 'Markdown could not be exported.',
       },
       { status: 500, headers }
     );

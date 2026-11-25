@@ -47,6 +47,75 @@ async function textOf(buffer: Uint8Array) {
   }
 }
 
+test('PDF text round-trips through the reviewed Markdown draft literally, without URL/entity reinterpretation', async () => {
+  for (const original of [
+    'https://example.com/path',
+    'Use &amp; and &#38; literally.',
+    'john@example.com www.example.com',
+    'mailto:john@example.com',
+  ]) {
+    const draft = await extractPdfDraft(new Uint8Array(await fixture([original])));
+    const { buffer } = await renderResumePdf(resume(section(draft.markdown)));
+    const result = await textOf(buffer);
+    assert.equal(result, original);
+    const pdf = await parsed(buffer);
+    try {
+      assert.equal((await (await pdf.getPage(1)).getAnnotations()).length, 0);
+    } finally {
+      await pdf.loadingTask.destroy();
+    }
+  }
+});
+
+test('prototype-name references remain literal unless explicitly defined', async () => {
+  const literal = await renderResumePdf(
+    resume(section('[constructor] [__proto__] [toString]', '[constructor]'))
+  );
+  assert.match(await textOf(literal.buffer), /\[constructor\] \[proto\] \[toString\]/);
+  const literalPdf = await parsed(literal.buffer);
+  try {
+    assert.equal((await (await literalPdf.getPage(1)).getAnnotations()).length, 0);
+  } finally {
+    await literalPdf.loadingTask.destroy();
+  }
+  const defined = await renderResumePdf(
+    resume(
+      section(
+        '[constructor]: https://example.com/constructor\n[__proto__]: https://example.com/proto\n',
+        '',
+        'definitions'
+      ),
+      section('[constructor] [__proto__]', '[constructor]', 'references')
+    )
+  );
+  const pdf = await parsed(defined.buffer);
+  try {
+    const annotations = await (await pdf.getPage(1)).getAnnotations();
+    assert.ok(
+      annotations.some((annotation) => annotation.url === 'https://example.com/constructor')
+    );
+    assert.ok(annotations.some((annotation) => annotation.url === 'https://example.com/proto'));
+  } finally {
+    await pdf.loadingTask.destroy();
+  }
+});
+
+test('reference links resolve across imported section boundaries', async () => {
+  const { buffer } = await renderResumePdf(
+    resume(
+      section('[portfolio]: https://example.com/portfolio\n', '', 'intro'),
+      section('[Visit][portfolio]\n', 'Work', 'work')
+    )
+  );
+  const pdf = await parsed(buffer);
+  try {
+    const annotations = await (await pdf.getPage(1)).getAnnotations();
+    assert.ok(annotations.some((annotation) => annotation.url === 'https://example.com/portfolio'));
+  } finally {
+    await pdf.loadingTask.destroy();
+  }
+});
+
 test('Classic renders selectable common Markdown, accented text, and four embedded licensed font faces', async () => {
   const { buffer, warnings } = await renderResumePdf(
     resume(
@@ -55,6 +124,9 @@ test('Classic renders selectable common Markdown, accented text, and four embedd
           '# José Noël — résumé',
           '',
           'Plain text, **bold face**, *italic face*, and ***bold italic face***. A &amp; B.',
+          '',
+          'A soft',
+          'line break stays in its paragraph.',
           '',
           '## Heading two',
           '### Heading three',
@@ -111,14 +183,16 @@ test('Classic renders selectable common Markdown, accented text, and four embedd
       '3. Third ordered item',
       '4. Fourth ordered item',
       'A useful quotation.',
+      'A soft line break stays in its paragraph.',
       'First hard line\nSecond hard line',
       'const code = 1',
       'function example()',
       'literal <tag> & value',
       'Experience and Education',
       'Unique final paragraph.',
-    ])
-      {assert.ok(text.includes(phrase), `Missing extracted text: ${phrase}\n${text}`);}
+    ]) {
+      assert.ok(text.includes(phrase), `Missing extracted text: ${phrase}\n${text}`);
+    }
     assert.equal(
       text.match(/José Noël/g)?.length,
       1,
@@ -191,8 +265,9 @@ test('long content naturally paginates without text loss, clipping, or shrinking
           item.y >= 40 && item.y <= 751,
           `Text outside vertical margins: ${JSON.stringify(item)}`
         );
-        if (/Entry|^W/.test(item.str))
-          {assert.equal(item.fontSize, 10.5, 'body text must not silently shrink');}
+        if (/Entry|^W/.test(item.str)) {
+          assert.equal(item.fontSize, 10.5, 'body text must not silently shrink');
+        }
       }
     }
   } finally {
@@ -255,6 +330,7 @@ test('unsupported Markdown remains readable, unsafe links are inactive, and Mark
       '~~strikethrough preserved~~',
       '[x] task source preserved',
       '[unsafe]',
+      // oxlint-disable-next-line no-script-url -- Assert an intentionally unsafe fixture stays visible as text.
       'javascript:',
       'file:///',
       'data:text/html',
@@ -332,7 +408,7 @@ test('extractor produces a reviewable escaped text draft without inferring Markd
   const escaped = await extractPdfDraft(literal);
   assert.ok(escaped.markdown.includes('\\# Not an inferred heading'));
   assert.ok(escaped.markdown.includes('\\- Not an inferred list'));
-  assert.ok(escaped.markdown.includes('\\[link\\]\\(https://example\\.invalid\\)'));
+  assert.ok(escaped.markdown.includes('\\[link\\]\\(https\\://example\\.invalid\\)'));
   assert.ok(escaped.markdown.includes('\\<img'));
 });
 

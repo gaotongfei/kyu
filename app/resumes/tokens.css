@@ -1,0 +1,132 @@
+/* Kyu Design Language v0.1 — system-aware semantic palette. No dependencies. */
+:root {
+  /* Surfaces: prefer the page canvas; introduce a surface only for a control. */
+  --kyu-canvas: #fdfdfc;
+  --kyu-surface: #f5f6f3;
+  --kyu-surface-hover: #f0f2ed;
+  --kyu-paper: #fff; /* PDF paper stays white in either scheme. */
+  --kyu-panel: #fff;
+
+  /* UI text colors are intended for canvas, panel, or surface. */
+  --kyu-ink: #272c28;
+  --kyu-text: #505b52;
+  --kyu-muted: #69736b;
+  --kyu-placeholder: #69736b;
+  --kyu-accent: #516c55;
+  --kyu-accent-soft: #eef2eb;
+  --kyu-action: #303d34;
+  --kyu-action-hover: #223127;
+  --kyu-on-action: #fff;
+  --kyu-border: #e5e8e1;
+  --kyu-control-border: #858f82;
+  --kyu-focus: #516c55;
+  --kyu-success: #526b50;
+  --kyu-warning: #806345;
+  --kyu-warning-soft: #faf7f0;
+  --kyu-danger: #9b5048;
+  --kyu-danger-soft: #fcf5f3;
+  --kyu-disabled: #a4aaa1;
+
+  /* Optional company-avatar tones, not interactive/status colors. */
+  --kyu-avatar-lilac: #eeedf4;
+  --kyu-avatar-lilac-ink: #716282;
+  --kyu-avatar-sage: #eff2ed;
+  --kyu-avatar-sage-ink: #5e725d;
+  --kyu-avatar-sand: #f7f0e8;
+  --kyu-avatar-sand-ink: #806343;
+
+  --kyu-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --kyu-font-mono: ui-monospace, 'SFMono-Regular', Consolas, monospace;
+  --kyu-type-micro: 0.625rem; /* 10px: decorative labels only */
+  --kyu-type-caption: 0.6875rem; /* 11px: secondary metadata */
+  --kyu-type-small: 0.75rem; /* 12px: controls and navigation */
+  --kyu-type-body: 0.8125rem; /* 13px: default */
+  --kyu-type-subheading: 1.1875rem; /* 19px */
+  --kyu-type-heading: 1.8125rem; /* 29px desktop, 26px narrow */
+  --kyu-leading-tight: 1.25;
+  --kyu-leading-body: 1.65;
+  --kyu-leading-reading: 1.85;
+  --kyu-weight-regular: 400;
+  --kyu-weight-medium: 500;
+  --kyu-weight-semibold: 600;
+
+  --kyu-space-1: 0.25rem;
+  --kyu-space-2: 0.5rem;
+  --kyu-space-3: 0.75rem;
+  --kyu-space-4: 1rem;
+  --kyu-space-5: 1.25rem;
+  --kyu-space-6: 1.5rem;
+  --kyu-space-8: 2rem;
+  --kyu-space-10: 2.5rem;
+  --kyu-space-12: 3rem;
+  --kyu-space-16: 4rem;
+
+  --kyu-frame: 55rem; /* Default 880px frame, including gutters */
+  --kyu-editor-frame: 80rem; /* Approved 1280px editor and navbar frame */
+  --kyu-reading: 62ch;
+  --kyu-gutter: 1.875rem; /* 30px desktop; 22px narrow */
+  --kyu-header-height: 5rem;
+  --kyu-control-height: 2.125rem; /* 34px; 44px for coarse pointers */
+  --kyu-hit-min: 2.75rem;
+  --kyu-avatar: 2.0625rem; /* 33px */
+  --kyu-icon: 1rem;
+  --kyu-radius-xs: 0.25rem;
+  --kyu-radius-sm: 0.3125rem;
+  --kyu-radius-md: 0.4375rem;
+  --kyu-radius-round: 999px;
+  --kyu-stroke: 1px;
+  --kyu-focus-width: 2px;
+  --kyu-focus-offset: 3px;
+  --kyu-shadow-overlay: 0 8px 24px rgb(39 44 40 / 8%);
+  --kyu-duration: 120ms;
+  --kyu-ease: ease-out;
+}
+
+/* Mantine's pre-hydration script and provider share this resolved scheme. */
+:root[data-mantine-color-scheme='dark'] {
+  --kyu-canvas: #191e1a;
+  --kyu-panel: #202621;
+  --kyu-surface: #252d26;
+  --kyu-surface-hover: #303b31;
+  --kyu-ink: #edf1eb;
+  --kyu-text: #c4cec2;
+  --kyu-muted: #a4b09f;
+  --kyu-placeholder: #a4b09f;
+  --kyu-accent: #aec5a4;
+  --kyu-accent-soft: #2a392b;
+  --kyu-action: #aec5a4;
+  --kyu-action-hover: #c1d5b8;
+  --kyu-on-action: #191e1a;
+  --kyu-border: #394539;
+  --kyu-control-border: #7d8c78;
+  --kyu-focus: #aec5a4;
+  --kyu-success: #aec5a4;
+  --kyu-warning: #dfbd91;
+  --kyu-warning-soft: #352e23;
+  --kyu-danger: #eda99d;
+  --kyu-danger-soft: #382825;
+  --kyu-disabled: #788574;
+  --kyu-shadow-overlay: 0 8px 24px rgb(0 0 0 / 24%);
+}
+
+/* Breakpoints are literals because CSS variables cannot be used in media queries. */
+@media (max-width: 40.625rem) {
+  /* 650px */
+  :root {
+    --kyu-gutter: 1.375rem;
+    --kyu-type-heading: 1.625rem;
+    --kyu-header-height: 4.3125rem;
+  }
+}
+
+@media (pointer: coarse) {
+  :root {
+    --kyu-control-height: var(--kyu-hit-min);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --kyu-duration: 0ms;
+  }
+}

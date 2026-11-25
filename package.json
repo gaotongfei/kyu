@@ -20,7 +20,10 @@
     "format:test": "oxfmt -c oxfmt.config.mjs --check \"**/*.{ts,tsx,css}\"",
     "format:write": "oxfmt -c oxfmt.config.mjs --write \"**/*.{ts,tsx,css}\"",
     "knip": "knip",
-    "test": "npx next typegen && npm run format:test && npm run lint && npm run typecheck && npm run knip && npm run jest",
+    "test": "npx next typegen && npm run format:test && npm run lint && npm run typecheck && npm run knip && npm run jest && npm run test:documents",
+    "test:documents": "tsx --test tests/markdown.integration.ts tests/pdf.integration.ts tests/import.integration.ts",
+    "test:db": "node scripts/test-database.mjs",
+    "test:e2e": "playwright test",
     "storybook": "storybook dev -p 6006",
     "storybook:build": "storybook build"
   },
