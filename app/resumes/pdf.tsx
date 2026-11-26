@@ -12,7 +12,7 @@ import {
   Text,
   View,
 } from '@react-pdf/renderer';
-import { CLASSIC_THEME } from './classic-theme';
+import { CLASSIC_THEME, classicListMarkerWidth } from './classic-theme';
 import type { Resume } from './model';
 import { parseResumeMarkdown, type BlockNode, type InlineNode } from './resume-markdown';
 
@@ -38,7 +38,7 @@ function registerFonts() {
     ],
   });
   // Replace React PDF's default English-pattern hyphenation with our overflow policy.
-  Font.registerHyphenationCallback(hyphenate);
+  Font.registerHyphenationCallback((word) => hyphenate(word, 24));
   fontsRegistered = true;
 }
 
@@ -47,12 +47,12 @@ function registerFonts() {
 const graphemes = new Intl.Segmenter('en', { granularity: 'grapheme' });
 
 // Overflow heuristic (kyu-resume-editor SPEC.md), not dictionary hyphenation:
-// keep tokens of <=24 graphemes whole; longer tokens offer breaks every 12.
+// keep body tokens of <=24 graphemes whole; longer tokens offer breaks every 12.
 // React PDF chooses breaks to fit the line and can add a visible hyphen.
 // This is not Chinese/Japanese line-breaking support; Lato also lacks CJK glyphs.
-function hyphenate(word: string) {
+function hyphenate(word: string, unbrokenLimit: number) {
   const letters = Array.from(graphemes.segment(word), (part) => part.segment);
-  if (letters.length <= 24) {
+  if (letters.length <= unbrokenLimit) {
     return [word];
   }
   const parts: string[] = [];
@@ -61,6 +61,8 @@ function hyphenate(word: string) {
   }
   return parts;
 }
+
+const hyphenateHeading = (word: string) => hyphenate(word, 12);
 
 // Classic uses the pack's semantic ink, accent, surface, and rule colors, in print points.
 const styles = StyleSheet.create({
@@ -80,6 +82,9 @@ const styles = StyleSheet.create({
     marginTop: CLASSIC_THEME.headingBefore,
     marginBottom: CLASSIC_THEME.headingAfter,
     lineHeight: CLASSIC_THEME.headingLineHeight,
+    borderBottomWidth: CLASSIC_THEME.headingRuleWidth,
+    borderBottomColor: CLASSIC_THEME.headingRuleColor,
+    paddingBottom: CLASSIC_THEME.headingPaddingBottom,
   },
   strong: { fontWeight: 700 },
   emphasis: { fontStyle: 'italic' },
@@ -102,8 +107,9 @@ const styles = StyleSheet.create({
     padding: CLASSIC_THEME.codePadding,
     marginBottom: CLASSIC_THEME.paragraphGap,
   },
+  list: { marginBottom: CLASSIC_THEME.paragraphGap },
   listItem: { flexDirection: 'row', marginBottom: CLASSIC_THEME.listItemGap },
-  marker: { width: CLASSIC_THEME.listMarkerWidth, flexShrink: 0 },
+  marker: { flexShrink: 0 },
   listBody: { flexGrow: 1, flexShrink: 1, minWidth: 0 },
 });
 
@@ -152,7 +158,15 @@ function blocks(nodes: BlockNode[]): ReactNode[] {
           <Text
             key={i}
             minPresenceAhead={24}
-            style={[styles.heading, { fontSize: CLASSIC_THEME.headingSizes[node.depth - 1] }]}
+            hyphenationCallback={hyphenateHeading}
+            style={[
+              styles.heading,
+              {
+                fontSize: CLASSIC_THEME.headingSizes[node.depth - 1],
+                textAlign: node.depth === 1 ? 'center' : 'left',
+                letterSpacing: node.depth === 1 ? CLASSIC_THEME.titleLetterSpacing : 0,
+              },
+            ]}
           >
             {inline(node.children)}
           </Text>
@@ -178,17 +192,23 @@ function blocks(nodes: BlockNode[]): ReactNode[] {
             {node.text}
           </Text>
         );
-      case 'list':
+      case 'list': {
+        const markerWidth = classicListMarkerWidth(
+          node.ordered ? node.start + node.items.length - 1 : undefined
+        );
         return (
-          <View key={i}>
+          <View key={i} style={styles.list}>
             {node.items.map((item, index) => (
               <View key={index} style={styles.listItem}>
-                <Text style={styles.marker}>{node.ordered ? `${node.start + index}.` : '•'}</Text>
+                <Text style={[styles.marker, { width: markerWidth }]}>
+                  {node.ordered ? `${node.start + index}.` : '•'}
+                </Text>
                 <View style={styles.listBody}>{blocks(item)}</View>
               </View>
             ))}
           </View>
         );
+      }
       default:
         throw new Error('Unsupported Classic block node.');
     }

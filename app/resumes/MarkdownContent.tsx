@@ -1,5 +1,5 @@
 import { createElement, type CSSProperties, type ReactNode } from 'react';
-import { CLASSIC_THEME as theme } from './classic-theme';
+import { CLASSIC_THEME as theme, classicListMarkerWidth } from './classic-theme';
 import type { BlockNode, InlineNode, parseResumeMarkdown } from './resume-markdown';
 
 const pt = (value: number) => `${value}pt`;
@@ -73,6 +73,10 @@ function blocks(nodes: BlockNode[]): ReactNode[] {
               fontSize: pt(theme.headingSizes[node.depth - 1]),
               fontWeight: 700,
               lineHeight: theme.headingLineHeight,
+              textAlign: node.depth === 1 ? 'center' : 'left',
+              letterSpacing: pt(node.depth === 1 ? theme.titleLetterSpacing : 0),
+              borderBottom: `${pt(theme.headingRuleWidth)} solid ${theme.headingRuleColor}`,
+              paddingBottom: pt(theme.headingPaddingBottom),
               margin: `${pt(theme.headingBefore)} 0 ${pt(theme.headingAfter)}`,
             },
           },
@@ -126,8 +130,10 @@ function blocks(nodes: BlockNode[]): ReactNode[] {
           </li>
         ));
         const style: CSSProperties = {
-          margin: 0,
-          paddingLeft: pt(theme.listMarkerWidth),
+          margin: `0 0 ${pt(theme.paragraphGap)}`,
+          paddingLeft: pt(
+            classicListMarkerWidth(node.ordered ? node.start + node.items.length - 1 : undefined)
+          ),
           listStyleType: node.ordered ? 'decimal' : 'disc',
         };
         return node.ordered ? (

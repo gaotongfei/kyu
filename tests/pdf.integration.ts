@@ -2,7 +2,8 @@ import React from 'react';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Document, Page, renderToBuffer, Text } from '@react-pdf/renderer';
-import { extractText, extractTextItems, getDocumentProxy } from 'unpdf';
+import { extractText, extractTextItems, getDocumentProxy, getResolvedPDFJS } from 'unpdf';
+import { CLASSIC_THEME as theme } from '../app/resumes/classic-theme';
 import type { Resume } from '../app/resumes/model';
 import { renderResumePdf } from '../app/resumes/pdf';
 import { extractPdfDraft, MAX_PDF_BYTES, MAX_PDF_PAGES } from '../app/resumes/pdf-import';
@@ -288,6 +289,134 @@ test('Classic renders selectable common Markdown, accented text, and four embedd
     4,
     'each font must support selectable Unicode text'
   );
+});
+
+test('Classic centers the tracked name, rules every heading, and keeps body and lists compact', async () => {
+  const { buffer, warnings } = await renderResumePdf(
+    resume(
+      '# Alex Morgan',
+      'Body text.',
+      '## Experience',
+      '### Projects',
+      '#### Education',
+      '##### Skills',
+      '###### Languages',
+      '- Bullet',
+      '3. Third item'
+    )
+  );
+  assert.deepEqual(warnings, []);
+  const pdf = await parsed(buffer);
+  try {
+    assert.equal(pdf.numPages, 1);
+    const { items } = await extractTextItems(pdf);
+    const find = (text: string) => {
+      const item = items[0].find((part) => part.str === text);
+      assert.ok(item, `Missing PDF text: ${text}`);
+      return item;
+    };
+    const title = find('Alex Morgan');
+    assert.equal(title.fontSize, 24);
+    assert.ok(Math.abs(title.x + title.width / 2 - theme.pageWidth / 2) < 2);
+    for (const [index, text] of [
+      'Experience',
+      'Projects',
+      'Education',
+      'Skills',
+      'Languages',
+    ].entries()) {
+      const heading = find(text);
+      assert.equal(heading.x, theme.paddingHorizontal);
+      assert.equal(heading.fontSize, [12, 11, 10.5, 10.5, 10.5][index]);
+    }
+    assert.equal(find('Body text.').x, theme.paddingHorizontal);
+    for (const text of ['Bullet', 'Third item']) {
+      assert.equal(find(text).x, theme.paddingHorizontal + 15.75);
+      assert.equal(find(text).fontSize, 10.5);
+    }
+
+    const { OPS } = await getResolvedPDFJS();
+    const operators = await (await pdf.getPage(1)).getOperatorList();
+    const strokes = operators.fnArray.flatMap((fn, index) => {
+      const args = operators.argsArray[index];
+      return fn === OPS.constructPath && args[0] === OPS.stroke ? [args[2]] : [];
+    });
+    assert.equal(strokes.length, 6, 'one bottom rule per heading, including H3–H6');
+    for (const bounds of strokes) {
+      assert.equal(bounds[0], theme.paddingHorizontal);
+      assert.equal(bounds[2], theme.pageWidth - theme.paddingHorizontal);
+      assert.equal(bounds[1], bounds[3], 'heading rules must be horizontal');
+    }
+    const thinBorderClips = operators.fnArray.filter((fn, index) => {
+      const args = operators.argsArray[index];
+      if (fn !== OPS.constructPath || args[0] !== OPS.endPath) {
+        return false;
+      }
+      const bounds = args[2];
+      return (
+        bounds[0] === theme.paddingHorizontal &&
+        bounds[2] === theme.pageWidth - theme.paddingHorizontal &&
+        Math.abs(bounds[3] - bounds[1] - 0.6) < 0.001
+      );
+    });
+    assert.equal(thinBorderClips.length, 6, 'rules retain the shared 0.6pt visible thickness');
+    const colors = operators.fnArray.flatMap((fn, index) =>
+      fn === OPS.setStrokeRGBColor ? operators.argsArray[index] : []
+    );
+    assert.deepEqual(colors, Array(6).fill(theme.headingRuleColor));
+  } finally {
+    await pdf.loadingTask.destroy();
+  }
+});
+
+test('large ordered markers never overlap the body at the compact list inset', async () => {
+  const { buffer } = await renderResumePdf(resume('98. First\n99. Second\n100. Third'));
+  const pdf = await parsed(buffer);
+  try {
+    const { items } = await extractTextItems(pdf);
+    for (const [marker, body] of [
+      ['98.', 'First'],
+      ['99.', 'Second'],
+      ['100.', 'Third'],
+    ]) {
+      const label = items[0].find((item) => item.str === marker);
+      const text = items[0].find((item) => item.str === body);
+      assert.ok(label && text, 'ordered numbers and body text must remain selectable');
+      assert.ok(label.x + label.width + 2 < text.x, `Marker ${marker} collides with body text`);
+      assert.equal(text.x, theme.paddingHorizontal + 28.35);
+    }
+  } finally {
+    await pdf.loadingTask.destroy();
+  }
+});
+
+test('body words up to 24 graphemes remain whole near line boundaries', async () => {
+  for (const word of ['M'.repeat(13), 'M'.repeat(20), 'M'.repeat(24), 'internationalization']) {
+    const words = Array(6).fill(word);
+    const { buffer } = await renderResumePdf(resume(words.join(' ')));
+    assert.deepEqual((await textOf(buffer)).trim().split(/\s+/), words);
+  }
+});
+
+test('tracked H1 identifiers wrap without clipping even below the body overflow threshold', async () => {
+  for (const length of [20, 21, 24, 25, 48]) {
+    const word = 'M'.repeat(length);
+    const { buffer } = await renderResumePdf(resume(`# **${word}**`, 'Body stays unchanged.'));
+    const pdf = await parsed(buffer);
+    try {
+      const { items } = await extractTextItems(pdf);
+      const title = items.flat().filter((item) => item.str.includes('M'));
+      assert.equal(title.map((item) => item.str.replace(/-/g, '')).join(''), word);
+      for (const item of title) {
+        assert.equal(item.fontSize, 24, 'do not shrink the title to fit');
+        assert.ok(item.x >= theme.paddingHorizontal - 1);
+        assert.ok(item.x + item.width <= theme.pageWidth - theme.paddingHorizontal + 1);
+      }
+      assert.ok((await textOf(buffer)).includes('Body stays unchanged.'));
+    } finally {
+      await pdf.loadingTask.destroy();
+    }
+  }
 });
 
 test('long content naturally paginates without text loss, clipping, or shrinking; long identifiers wrap', async () => {

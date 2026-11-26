@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { CLASSIC_THEME as theme } from './classic-theme';
 import { MarkdownContent } from './MarkdownContent';
 import { MarkdownPreview } from './MarkdownPreview';
 import type { Resume } from './model';
@@ -80,9 +81,57 @@ it('leaves empty content blank and shares Classic document styles independently 
     color: '#272c28',
     backgroundColor: '#ffffff',
     fontSize: '10.5pt',
-    lineHeight: '1.45',
+    lineHeight: '1.3',
   });
   expect(container.querySelector('iframe')).toBeNull();
+});
+
+it('uses compact resume typography with a tracked, centered name and ruled semantic headings', () => {
+  const contentMarkdown = [
+    '# Alex **Morgan**',
+    'Body text stays left-aligned.',
+    '## [Experience](https://example.com)',
+    '### *Projects*',
+    '#### Education',
+    '##### Skills',
+    '###### Languages',
+    '- First bullet',
+    '  - Nested bullet',
+    '3. Third item',
+  ].join('\n\n');
+  render(<MarkdownPreview document={{ ...document, contentMarkdown }} />);
+  const article = screen.getByRole('article');
+  const headings = Array.from(article.querySelectorAll('h1, h2, h3, h4, h5, h6'));
+  const sizes = [24, 12, 11, 10.5, 10.5, 10.5];
+  expect(headings).toHaveLength(6);
+  headings.forEach((heading, index) => {
+    expect(heading.tagName).toBe(`H${index + 1}`);
+    expect(heading).toHaveStyle({
+      fontSize: `${sizes[index]}pt`,
+      textAlign: index === 0 ? 'center' : 'left',
+      letterSpacing: index === 0 ? '2.4pt' : '0pt',
+      borderBottom: `0.6pt solid ${theme.controlBorder}`,
+      paddingBottom: '2pt',
+      margin: '10pt 0 4pt',
+    });
+  });
+  expect(headings[0].querySelector('strong')).toHaveTextContent('Morgan');
+  expect(headings[1].querySelector('a')).toHaveAttribute('href', 'https://example.com/');
+  expect(headings[2].querySelector('em')).toHaveTextContent('Projects');
+  expect(screen.getByText('Body text stays left-aligned.')).toHaveStyle({ marginBottom: '4pt' });
+  expect(article.querySelector('p')?.style.textAlign).toBe('');
+  for (const list of article.querySelectorAll('ul, ol')) {
+    expect(list).toHaveStyle({ paddingLeft: '15.75pt', margin: '0 0 4pt' });
+  }
+  expect(article.querySelector('li')).toHaveStyle({ marginBottom: '1.5pt' });
+});
+
+it('reserves a wider shared gutter when ordered numbering reaches three digits', () => {
+  const contentMarkdown = '98. First\n99. Second\n100. Third\n\n- Bullet';
+  render(<MarkdownPreview document={{ ...document, contentMarkdown }} />);
+  const article = screen.getByRole('article');
+  expect(article.querySelector('ol')).toHaveStyle({ paddingLeft: '28.35pt' });
+  expect(article.querySelector('ul')).toHaveStyle({ paddingLeft: '15.75pt' });
 });
 
 it('contains within-limit parser failures and recovers when the source changes', () => {
@@ -116,7 +165,7 @@ it('renders shared headings, ordered lists, quotes, code and hard breaks as sema
   const contentMarkdown =
     '### Role\n\n4. Fourth\n5. Fifth\n\n> A quote\n\n---\n\n`inline`\n\n```txt\n<literal>&code;\n```\n\nFirst  \nSecond';
   const { container } = render(<MarkdownPreview document={{ ...document, contentMarkdown }} />);
-  expect(screen.getByRole('heading', { name: 'Role', level: 3 })).toHaveStyle({ fontSize: '12pt' });
+  expect(screen.getByRole('heading', { name: 'Role', level: 3 })).toHaveStyle({ fontSize: '11pt' });
   expect(screen.getByRole('article').firstElementChild?.tagName).toBe('H3');
   expect(screen.getAllByRole('heading')).toHaveLength(2);
   expect(container.querySelector('ol')).toHaveAttribute('start', '4');
