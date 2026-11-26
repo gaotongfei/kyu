@@ -469,6 +469,55 @@ test('extractor produces a reviewable escaped text draft without inferring Markd
   assert.ok(escaped.markdown.includes('\\<img'));
 });
 
+test('PDF-imported lines become hard breaks without reinterpreting literal text', async () => {
+  const lines = [
+    'Alex Morgan',
+    'Full-Stack Software Engineer',
+    'Github: https://example.invalid/profile',
+    'EXPERIENCE',
+    '# Not an inferred heading',
+    '- Not an inferred list',
+    '*Literal* &amp; [label](https://example.invalid)',
+    'A literal backslash at the end \\',
+  ];
+  const draft = await extractPdfDraft(await fixture([lines.join('\n')]));
+  assert.ok(draft.markdown.includes('Alex Morgan  \nFull\\-Stack'));
+  const parsed = parseResumeMarkdown(draft.markdown);
+  assert.equal(parsed.blocks.length, 1);
+  const paragraph = parsed.blocks[0];
+  assert.equal(paragraph.type, 'paragraph');
+  if (paragraph.type !== 'paragraph') {
+    assert.fail('Imported PDF text must remain a literal paragraph.');
+  }
+  assert.equal(paragraph.children.filter((node) => node.type === 'break').length, lines.length - 1);
+  assert.equal(
+    paragraph.children
+      .map((node) => {
+        if (node.type === 'break') return '\n';
+        if (node.type === 'text') return node.text;
+        return assert.fail('Imported PDF text must not gain formatting or links.');
+      })
+      .join(''),
+    lines.join('\n')
+  );
+  assert.equal(draft.markdown.endsWith('  '), false);
+});
+
+test('PDF-imported line breaks leave page separators as paragraphs', async () => {
+  const draft = await extractPdfDraft(
+    await fixture(['First line\nSecond line', 'Next page\nFinal line'])
+  );
+  assert.equal(draft.markdown, 'First line  \nSecond line\n\nNext page  \nFinal line');
+  const parsed = parseResumeMarkdown(draft.markdown);
+  assert.equal(parsed.blocks.length, 2);
+  for (const block of parsed.blocks) {
+    assert.equal(block.type, 'paragraph');
+    if (block.type === 'paragraph') {
+      assert.equal(block.children.filter((node) => node.type === 'break').length, 1);
+    }
+  }
+});
+
 test('extractor warns honestly when only some pages contain text', async () => {
   const buffer = await fixture(['First generated page', '', 'Last generated page']);
   const draft = await extractPdfDraft(buffer);

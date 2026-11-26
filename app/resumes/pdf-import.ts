@@ -68,7 +68,10 @@ export async function extractPdfDraft(
       );
     }
     return {
-      markdown: pages.filter(Boolean).map(escapeMarkdown).join('\n\n'),
+      markdown: pages
+        .filter(Boolean)
+        .map((page) => escapeMarkdown(page).replace(/(?<!\n)\n(?!\n)/g, '  \n'))
+        .join('\n\n'),
       warnings,
       pages: pdf.numPages,
     };
