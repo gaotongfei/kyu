@@ -1,0 +1,16 @@
+{
+  "enabledBoards": ["ashby:ashby", "greenhouse:figma"],
+  "searches": [
+    {
+      "id": "software-us-ca",
+      "name": "Example software roles in the US and Canada — edit before using",
+      "enabled": true,
+      "titlePhrases": ["software engineer", "full stack engineer"],
+      "countries": ["US", "CA"],
+      "locationPhrases": [],
+      "allowUnknownLocation": false,
+      "workArrangements": [],
+      "allowUnknownWorkArrangement": false
+    }
+  ]
+}

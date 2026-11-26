@@ -1,0 +1,35 @@
+[
+  {
+    "id": "software-us-ca",
+    "name": "Illustrative software roles — US / Canada",
+    "enabled": false,
+    "titlePhrases": ["software engineer", "software developer"],
+    "countries": ["US", "CA"],
+    "locationPhrases": [],
+    "allowUnknownLocation": false,
+    "workArrangements": [],
+    "allowUnknownWorkArrangement": false
+  },
+  {
+    "id": "data-us-ca",
+    "name": "Illustrative data roles — US / Canada",
+    "enabled": false,
+    "titlePhrases": ["data engineer", "data scientist", "data analyst"],
+    "countries": ["US", "CA"],
+    "locationPhrases": [],
+    "allowUnknownLocation": false,
+    "workArrangements": [],
+    "allowUnknownWorkArrangement": false
+  },
+  {
+    "id": "ai-us-ca",
+    "name": "Illustrative AI roles — US / Canada",
+    "enabled": false,
+    "titlePhrases": ["AI", "machine learning", "artificial intelligence"],
+    "countries": ["US", "CA"],
+    "locationPhrases": [],
+    "allowUnknownLocation": false,
+    "workArrangements": [],
+    "allowUnknownWorkArrangement": false
+  }
+]
