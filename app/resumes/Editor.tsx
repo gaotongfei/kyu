@@ -290,7 +290,7 @@ export function Editor({ initialLibrary, initialDocument, initialError }: Editor
   }
 
   function switchDocument(id: string) {
-    void perform('Saving before switching…', async () => {
+    perform('Saving before switching…', async () => {
       await flushCurrent();
       if (queue?.getSnapshot().document.id !== id) {
         openDocument(unwrap(await loadDocument(id)));
@@ -306,7 +306,7 @@ export function Editor({ initialLibrary, initialDocument, initialError }: Editor
     }
     dialogReturnRef.current =
       next === 'rename' || next === 'delete' ? overflowRef.current : titleRef.current;
-    void perform('Preparing resume…', async () => {
+    perform('Preparing resume…', async () => {
       // Opening New or Import never abandons the current queue, even on failure.
       if (next === 'new' || next === 'import') {
         await flushCurrent();
@@ -329,7 +329,7 @@ export function Editor({ initialLibrary, initialDocument, initialError }: Editor
   }
 
   function refresh() {
-    void perform('Connecting to resume storage…', async () => {
+    perform('Connecting to resume storage…', async () => {
       await flushCurrent();
       const nextLibrary = unwrap(await loadLibrary());
       const document =
@@ -344,7 +344,7 @@ export function Editor({ initialLibrary, initialDocument, initialError }: Editor
   }
 
   function createResume(input: ResumeInput) {
-    void perform('Saving and creating resume…', async () => {
+    perform('Saving and creating resume…', async () => {
       await flushCurrent();
       const created = unwrap(await createDocument(input));
       openDocument(created);
@@ -356,7 +356,7 @@ export function Editor({ initialLibrary, initialDocument, initialError }: Editor
   }
 
   function renameResume() {
-    void perform('Saving resume name…', async () => {
+    perform('Saving resume name…', async () => {
       const saved = await flushCurrent();
       if (!saved || !queue) {
         return;
@@ -374,7 +374,7 @@ export function Editor({ initialLibrary, initialDocument, initialError }: Editor
   }
 
   function removeResume() {
-    void perform('Saving before deleting…', async () => {
+    perform('Saving before deleting…', async () => {
       const saved = await flushCurrent();
       if (!saved) {
         return;
@@ -396,7 +396,7 @@ export function Editor({ initialLibrary, initialDocument, initialError }: Editor
       return;
     }
     const file = importFile;
-    void perform('Reading import for review…', async () => {
+    perform('Reading import for review…', async () => {
       await flushCurrent();
       if (file.size > 10 * 1024 * 1024) {
         throw new OperationError('Files must be 10 MiB or smaller.');
@@ -419,7 +419,7 @@ export function Editor({ initialLibrary, initialDocument, initialError }: Editor
   }
 
   function exportResume(extension: 'md' | 'pdf') {
-    void perform('Saving latest edits before download…', async () => {
+    perform('Saving latest edits before download…', async () => {
       const saved = await flushCurrent();
       if (!saved) {
         return;
@@ -450,7 +450,7 @@ export function Editor({ initialLibrary, initialDocument, initialError }: Editor
   }
 
   function retrySave() {
-    void perform('Retrying save…', async () => {
+    perform('Retrying save…', async () => {
       if (queue && !(await queue.retry())) {
         throw new OperationError(
           queue.getSnapshot().error ?? 'Saving failed. Your edits are still here.'
