@@ -1,6 +1,6 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
 import 'server-only';
-import { db } from '../../db';
+import { getDb } from '../../db';
 import { resumes } from '../../db/schema';
 import {
   ResumeError,
@@ -16,7 +16,7 @@ function document(row: typeof resumes.$inferSelect): Resume {
 }
 
 export async function listResumes() {
-  return db
+  return getDb()
     .select({ id: resumes.id, name: resumes.name, version: resumes.version })
     .from(resumes)
     .orderBy(desc(resumes.updatedAt), resumes.id);
@@ -24,7 +24,7 @@ export async function listResumes() {
 
 export async function getResume(id: string) {
   validId(id);
-  const [row] = await db.select().from(resumes).where(eq(resumes.id, id));
+  const [row] = await getDb().select().from(resumes).where(eq(resumes.id, id));
   if (!row) {
     throw new ResumeError('This resume no longer exists.');
   }
@@ -32,14 +32,14 @@ export async function getResume(id: string) {
 }
 
 export async function createResume(input: ResumeInput) {
-  const [row] = await db.insert(resumes).values(validateInput(input)).returning();
+  const [row] = await getDb().insert(resumes).values(validateInput(input)).returning();
   return document(row);
 }
 
 export async function saveResume(id: string, version: number, input: ResumeInput) {
   validId(id);
   validVersion(version);
-  const [row] = await db
+  const [row] = await getDb()
     .update(resumes)
     .set({
       ...validateInput(input),
@@ -60,7 +60,7 @@ export async function saveResume(id: string, version: number, input: ResumeInput
 export async function deleteResume(id: string, version: number) {
   validId(id);
   validVersion(version);
-  const rows = await db
+  const rows = await getDb()
     .delete(resumes)
     .where(and(eq(resumes.id, id), eq(resumes.version, version)))
     .returning({ id: resumes.id });
