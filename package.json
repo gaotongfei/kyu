@@ -20,7 +20,10 @@
     "format:test": "oxfmt -c oxfmt.config.mjs --check \"**/*.{ts,tsx,css}\"",
     "format:write": "oxfmt -c oxfmt.config.mjs --write \"**/*.{ts,tsx,css}\"",
     "knip": "knip",
-    "test": "npx next typegen && npm run format:test && npm run lint && npm run typecheck && npm run knip && npm run jest",
+    "test": "npx next typegen && npm run format:test && npm run lint && npm run typecheck && npm run knip && npm run jest && npm run test:documents",
+    "test:documents": "tsx --test tests/markdown.integration.ts tests/pdf.integration.ts tests/import.integration.ts tests/resume-markdown.integration.ts",
+    "test:db": "node scripts/test-database.mjs",
+    "test:e2e": "playwright test",
     "storybook": "storybook dev -p 6006",
     "storybook:build": "storybook build"
   },
@@ -29,14 +32,18 @@
     "@mantine/hooks": "9.8.1",
     "@next/bundle-analyzer": "^16.0.0",
     "@next/env": "16.4.6",
+    "@react-pdf/renderer": "^4.9.1",
     "drizzle-orm": "^0.45.4",
+    "marked": "^18.3.0",
     "next": "16.4.6",
     "postgres": "^4.1.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "unpdf": "^2.2.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@storybook/addon-themes": "^10.0.0",
     "@storybook/nextjs": "^10.0.0",
     "@testing-library/dom": "^10.4.1",
@@ -58,6 +65,7 @@
     "storybook": "^10.0.0",
     "stylelint": "^18.0.0",
     "stylelint-config-standard": "^41.0.0",
+    "tsx": "^4.23.15",
     "typescript": "7.0.2"
   },
   "packageManager": "yarn@4.18.1"

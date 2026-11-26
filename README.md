@@ -1,37 +1,45 @@
 # Kyu
 
+A self-hosted resume editor with one freely editable Markdown document per resume.
+
+There is no authentication. Run only on a private machine/network with one trusted operator.
+
 ## Local development
 
-Use the Node.js version in `.nvmrc`, Yarn 4 (via Corepack), and Docker with Compose.
+Use Node.js from `.nvmrc`, Yarn 4 via Corepack, and Docker Compose.
 
 ```sh
 yarn install
-cp .env.example .env
+test -f .env || cp .env.example .env
 docker compose up -d --wait
 yarn db:migrate
-yarn dev
+yarn dev --hostname 127.0.0.1
 ```
 
-## npm scripts
+Create `.env` only if it does not already exist. Open `/resumes`.
 
-### Build and dev scripts
+The initial migration expects a **fresh database**. It does not convert the former section-based schema. Use a new database for this version; do not reset an existing database or volume to run tests.
 
-- `dev` – start dev server
-- `build` – bundle application for production
-- `analyze` – analyzes application bundle with [@next/bundle-analyzer](https://www.npmjs.com/package/@next/bundle-analyzer)
+## Editing and exports
 
-### Testing scripts
+Create, select, rename and delete named resumes. Edit the entire source in one textarea; headings and fences are ordinary Markdown, not application-managed sections. Autosave is version-checked, and switching or exporting waits for pending edits. Failed saves retain local edits with explicit retry and an unsaved Markdown backup.
 
-- `typecheck` – checks TypeScript types
-- `lint` – runs oxlint and stylelint
-- `knip` – checks for unused files, exports and dependencies
-- `format:test` – checks files with oxfmt
-- `jest` – runs jest tests
-- `jest:watch` – starts jest watch
-- `test` – generates Next.js types, then runs `format:test`, `lint`, `typecheck`, `knip` and `jest`
+The live HTML preview updates locally, including unsaved edits. Markdown downloads contain the stored source; PDF rendering happens only when explicitly exporting. Both renderers share safe Markdown parsing, the Classic theme and bundled Lato fonts. The preview is continuous, not an exact paginated PDF proof. Unsupported syntax stays readable; HTML and unsafe links are not executed.
 
-### Other scripts
+Imports are reviewed and editable before creating a new resume, never replacements for the current document:
 
-- `storybook` – starts storybook dev server
-- `storybook:build` – build production storybook bundle to `storybook-static`
-- `format:write` – formats all files with oxfmt
+- **Markdown:** strict UTF-8, up to 500,000 UTF-16 units, including empty documents. Unedited imports preserve whitespace, BOM and CRLF through export. Editing uses normal browser textarea behavior.
+- **PDF:** up to 10 MiB and 20 pages, with selectable text. Extraction is local and produces a Markdown draft with explicit line breaks for preview and PDF export; no OCR, layout recovery or original-file retention. Existing imported documents are not rewritten—reimport the PDF or add Markdown hard breaks to keep their lines separate.
+
+## Checks
+
+```sh
+yarn test
+yarn test:db
+yarn build
+KYU_BASE_URL=http://127.0.0.1:3017 yarn test:e2e
+```
+
+Builds and unit/document tests require neither `DATABASE_URL` nor a running database. Runtime storage operations still require a configured `DATABASE_URL`. CI explicitly builds without database configuration, runs the regular tests and then runs `test:db`.
+
+`test:db` requires Docker and creates/removes only its own ephemeral PostgreSQL container, applying the migration twice to verify safe reapplication. Browser tests require an app server and a separate test database; they create and modify sample resumes. Keep user-owned databases and environment files out of verification.

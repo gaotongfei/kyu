@@ -23,7 +23,11 @@ jobs:
           cache-dependency-path: '**/yarn.lock'
       - name: Install dependencies
         run: yarn
-      - name: Run build
+      - name: Run build without database configuration
         run: npm run build
+        env:
+          DATABASE_URL: ''
       - name: Run tests
         run: npm test
+      - name: Run isolated PostgreSQL integration tests
+        run: yarn test:db
