@@ -141,16 +141,24 @@ describe('JobCatalog', () => {
       'Loading catalog… Reading previously collected jobs only.'
     );
     expect(container.querySelector('details')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Discover' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Resumes' })).toHaveAttribute('href', '/resumes');
   });
 
-  it('uses a read-only Discover header and labeled native GET filters, active by default', () => {
+  it('uses shared navigation and labeled native GET filters, active by default', () => {
     const { container } = render(<JobCatalog result={fixtureCatalog()} />);
-    expect(screen.getByRole('heading', { level: 1, name: 'Your next move.' })).toBeInTheDocument();
-    expect(screen.getByText('Private instance · Read-only catalog')).toBeInTheDocument();
-    expect(
-      within(screen.getByRole('navigation', { name: 'Primary' })).getAllByRole('link')
-    ).toHaveLength(1);
-    expect(screen.getByRole('link', { name: 'Discover' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.queryByText('Your next move.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Private instance · Read-only catalog')).not.toBeInTheDocument();
+    const navigation = screen.getByRole('navigation', { name: 'Main navigation' });
+    expect(within(navigation).getAllByRole('link')).toHaveLength(2);
+    expect(within(navigation).getByRole('link', { name: 'Discover' })).toHaveAttribute(
+      'aria-current',
+      'page'
+    );
+    expect(within(navigation).getByRole('link', { name: 'Resumes' })).toHaveAttribute(
+      'href',
+      '/resumes'
+    );
     expect(screen.queryByRole('link', { name: /Saved|Studio|Profile/ })).not.toBeInTheDocument();
     const form = screen.getByRole('form', { name: 'Filter collected jobs' });
     expect(form).toHaveAttribute('method', 'get');

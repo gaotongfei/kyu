@@ -61,8 +61,7 @@
   --kyu-space-12: 3rem;
   --kyu-space-16: 4rem;
 
-  --kyu-frame: 55rem; /* Default 880px frame, including gutters */
-  --kyu-editor-frame: 80rem; /* Approved 1280px editor and navbar frame */
+  --kyu-frame: 80rem; /* Shared 1280px page and navbar frame, including gutters */
   --kyu-reading: 62ch;
   --kyu-gutter: 1.875rem; /* 30px desktop; 22px narrow */
   --kyu-header-height: 5rem;

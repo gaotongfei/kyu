@@ -31,51 +31,8 @@
   outline-offset: var(--kyu-focus-offset);
 }
 
-.header {
-  display: flex;
-  align-items: center;
-  gap: var(--kyu-space-10);
-  min-height: var(--kyu-header-height);
-  border-bottom: var(--kyu-stroke) solid var(--kyu-border);
-}
-
-.brand {
-  color: var(--kyu-ink);
-  font-size: 1.4375rem;
-  font-weight: var(--kyu-weight-semibold);
-  letter-spacing: -0.0625rem;
-}
-
-.brand span {
-  color: var(--kyu-accent);
-}
-
-.header nav a {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--kyu-control-height);
-  color: var(--kyu-ink);
-  font-size: var(--kyu-type-small);
-  text-decoration: none;
-}
-
-.instance {
-  margin-left: auto;
-  color: var(--kyu-muted);
-  font-size: var(--kyu-type-caption);
-}
-
 .main {
   padding-block: var(--kyu-space-16) var(--kyu-space-12);
-}
-
-.main h1 {
-  margin: 0 0 var(--kyu-space-3);
-  color: var(--kyu-ink);
-  font-size: var(--kyu-type-heading);
-  font-weight: var(--kyu-weight-medium);
-  line-height: var(--kyu-leading-tight);
-  letter-spacing: -0.05rem;
 }
 
 .main p {
@@ -87,7 +44,6 @@
   flex-wrap: wrap;
   align-items: end;
   gap: var(--kyu-space-4);
-  margin-top: var(--kyu-space-8);
 }
 
 .field {
@@ -472,15 +428,6 @@
 }
 
 @media (max-width: 40.625rem) {
-  .header {
-    gap: var(--kyu-space-6);
-  }
-
-  .instance {
-    max-width: 10rem;
-    text-align: right;
-  }
-
   .main {
     padding-top: var(--kyu-space-10);
   }
@@ -516,12 +463,6 @@
 
   .facts dd {
     margin-bottom: var(--kyu-space-2);
-  }
-}
-
-@media (max-width: 23.75rem) {
-  .header {
-    gap: var(--kyu-space-3);
   }
 }
 

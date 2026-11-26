@@ -16,7 +16,7 @@ Role/company and reported-location GET filters are bounded, SQL-parameterized li
 
 ## Presentation contract
 
-The Kyu frame and shared system-aware palette are defined by `kyu-architecture`; the editor's app-owned semantic tokens survive private-reference removal. Catalog styling inherits the resolved scheme without changing the root provider or overriding editor colors. Native disclosures expand job details inline. Original/application anchors are siblings of the summary, never actions nested inside an interactive row. The view renders plain description text rather than trusting stored HTML and validates link protocols independently.
+The shared navbar, page frame and system-aware palette are defined by `kyu-architecture`; the editor's app-owned semantic tokens survive private-reference removal. The catalog opens directly with filters, without a promotional title or instance subtitle. Catalog styling inherits the resolved scheme without changing the root provider or overriding editor colors. Native disclosures expand job details inline. Original/application anchors are siblings of the summary, never actions nested inside an interactive row. The view renders plain description text rather than trusting stored HTML and validates link protocols independently.
 
 Rows preserve role, employer, reported locations/work arrangements, compensation currency/period or explicit unknowns, source identity, observation times and active/inactive state. Expanded facts retain source dates and eligibility caveats. Failed/partial board refreshes and incomplete pay details distinguish earlier observations from fresh verification. Hirebase observations are identified as search samples, not full employer-board refreshes.
 
