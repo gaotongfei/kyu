@@ -1,5 +1,5 @@
 {
-  "id": "e9f1f80e-e5ee-491d-8e5b-27bd3f01a0b4",
+  "id": "5e1aa2d2-b2c8-4b84-abec-3a3343dc9902",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -21,12 +21,12 @@
           "primaryKey": false,
           "notNull": true
         },
-        "sections": {
-          "name": "sections",
-          "type": "jsonb",
+        "content_markdown": {
+          "name": "content_markdown",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'[]'::jsonb"
+          "default": "''"
         },
         "theme_key": {
           "name": "theme_key",
@@ -66,10 +66,6 @@
         "resumes_version_positive": {
           "name": "resumes_version_positive",
           "value": "\"resumes\".\"version\" > 0"
-        },
-        "resumes_sections_array": {
-          "name": "resumes_sections_array",
-          "value": "jsonb_typeof(\"resumes\".\"sections\") = 'array'"
         },
         "resumes_classic_theme": {
           "name": "resumes_classic_theme",

@@ -16,16 +16,40 @@ test('Next automatic development logging cannot serialize private server-action 
 });
 
 test('Markdown import returns a draft, not a persisted document', async () => {
-  const response = await upload('Imported.md', '# Name\n\n## Work\n**Engineer**\n');
+  const source =
+    '# Name\r\n\r\n## Work ##\r\n**Engineer**  \r\n\r\n```md\r\n## Still source\r\n```\r\n';
+  const response = await upload('Imported.md', source);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'private, no-store');
   const draft = await response.json();
   assert.equal(draft.name, 'Imported');
   assert.equal(draft.kind, 'md');
-  assert.equal(draft.sections.length, 2);
-  assert.equal(draft.sections[1].contentMarkdown, '**Engineer**\n');
+  assert.equal(draft.contentMarkdown, source);
+  assert.equal(Object.hasOwn(draft, 'sections'), false);
   assert.equal(draft.version, undefined);
 });
+test('an empty Markdown file is a valid empty draft; an empty PDF is invalid', async () => {
+  const markdown = await upload('empty.md', '');
+  assert.equal(markdown.status, 200);
+  assert.equal((await markdown.json()).contentMarkdown, '');
+  const pdf = await upload('empty.pdf', '');
+  assert.equal(pdf.status, 400);
+  assert.match((await pdf.json()).error, /Invalid PDF/);
+});
+
+test('UTF-8 BOM and more than 100 headings remain part of one unchanged source', async () => {
+  const source = `\ufeff# Résumé\r\n\r\n${'## Heading\r\n  Body  \r\n\r\n'.repeat(150)}`;
+  const response = await upload('source.md', source);
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).contentMarkdown, source);
+});
+
+test('whole-source character limit is checked before returning a review draft', async () => {
+  const response = await upload('large.md', 'x'.repeat(500_001));
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /500,000/);
+});
+
 test('invalid UTF-8, unsupported extensions and invalid PDFs get useful errors', async () => {
   const encoding = await upload('resume.md', new Uint8Array([255, 254, 0]));
   assert.equal(encoding.status, 400);

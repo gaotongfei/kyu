@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
 import {
   createResume,
@@ -16,10 +15,8 @@ const ids: string[] = [];
 const input = {
   name: 'Integration resume',
   themeKey: 'classic' as const,
-  sections: [
-    { id: randomUUID(), titleMarkdown: '**Experience**', contentMarkdown: '- Exact source\n\n' },
-    { id: randomUUID(), titleMarkdown: '', contentMarkdown: '# José\n' },
-  ],
+  contentMarkdown:
+    '# José\r\n\r\n## **Experience**\r\n  - Exact source  \r\n\r\n```md\r\n## Not a boundary\r\n```\r\n',
 };
 after(async () => {
   for (const id of ids) {
@@ -31,20 +28,23 @@ after(async () => {
   const globalDb = globalThis as unknown as { postgresClient: { end: () => Promise<void> } };
   await globalDb.postgresClient.end();
 });
-test('create, list, reload, rename, order, delete preserve source', async () => {
+test('create, list, reload, rename, edit and delete preserve whole Markdown exactly', async () => {
   const created = await createResume(input);
   ids.push(created.id);
   assert.equal(created.version, 1);
+  assert.equal(created.contentMarkdown, input.contentMarkdown);
+  assert.equal(Object.hasOwn(created, 'sections'), false);
   assert.ok((await listResumes()).some((entry) => entry.id === created.id));
-  assert.deepEqual((await getResume(created.id)).sections, input.sections);
+  assert.equal((await getResume(created.id)).contentMarkdown, input.contentMarkdown);
+  const changedSource = `${input.contentMarkdown}\n## Arbitrary new heading\n**Free editing**\n`;
   const saved = await saveResume(created.id, 1, {
     ...input,
     name: 'Renamed',
-    sections: [...input.sections].reverse(),
+    contentMarkdown: changedSource,
   });
   assert.equal(saved.name, 'Renamed');
   assert.equal(saved.version, 2);
-  assert.deepEqual((await getResume(created.id)).sections, [...input.sections].reverse());
+  assert.equal((await getResume(created.id)).contentMarkdown, changedSource);
   await assert.rejects(deleteResume(created.id, 1), { conflict: true });
   await deleteResume(created.id, 2);
   await assert.rejects(getResume(created.id), /no longer exists/);
@@ -53,20 +53,22 @@ test('only one concurrent writer can save a version', async () => {
   const created = await createResume(input);
   ids.push(created.id);
   const results = await Promise.allSettled([
-    saveResume(created.id, 1, { ...input, name: 'First tab' }),
-    saveResume(created.id, 1, { ...input, name: 'Second tab' }),
+    saveResume(created.id, 1, { ...input, contentMarkdown: '# First tab\n' }),
+    saveResume(created.id, 1, { ...input, contentMarkdown: '# Second tab\n' }),
   ]);
   assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
   assert.equal(results.filter((result) => result.status === 'rejected').length, 1);
-  assert.equal((await getResume(created.id)).version, 2);
+  const saved = await getResume(created.id);
+  assert.equal(saved.version, 2);
+  assert.ok(['# First tab\n', '# Second tab\n'].includes(saved.contentMarkdown));
 });
-test('invalid section inputs do not write', async () => {
+test('document limits reject invalid source before writes; empty documents are valid', async () => {
+  await assert.rejects(createResume({ ...input, contentMarkdown: 'x'.repeat(500_001) }), /500,000/);
   await assert.rejects(
-    createResume({ ...input, sections: [input.sections[0], input.sections[0]] }),
-    /unique/
+    createResume({ ...input, contentMarkdown: 'text\u0000text' }),
+    /null characters/
   );
-  await assert.rejects(
-    createResume({ ...input, sections: [{ ...input.sections[0], titleMarkdown: 'bad\ntitle' }] }),
-    /single-line/
-  );
+  const empty = await createResume({ ...input, contentMarkdown: '' });
+  ids.push(empty.id);
+  assert.equal((await getResume(empty.id)).contentMarkdown, '');
 });

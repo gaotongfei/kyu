@@ -4,7 +4,7 @@
   --kyu-canvas: #fdfdfc;
   --kyu-surface: #f5f6f3;
   --kyu-surface-hover: #f0f2ed;
-  --kyu-paper: #fff; /* PDF paper stays white in either scheme. */
+  --kyu-paper: #fff; /* Classic document paper stays white in either scheme. */
   --kyu-panel: #fff;
 
   /* UI text colors are intended for canvas, panel, or surface. */
@@ -84,28 +84,28 @@
 
 /* Mantine's pre-hydration script and provider share this resolved scheme. */
 :root[data-mantine-color-scheme='dark'] {
-  --kyu-canvas: #191e1a;
-  --kyu-panel: #202621;
-  --kyu-surface: #252d26;
-  --kyu-surface-hover: #303b31;
-  --kyu-ink: #edf1eb;
-  --kyu-text: #c4cec2;
-  --kyu-muted: #a4b09f;
-  --kyu-placeholder: #a4b09f;
-  --kyu-accent: #aec5a4;
-  --kyu-accent-soft: #2a392b;
-  --kyu-action: #aec5a4;
-  --kyu-action-hover: #c1d5b8;
-  --kyu-on-action: #191e1a;
-  --kyu-border: #394539;
-  --kyu-control-border: #7d8c78;
-  --kyu-focus: #aec5a4;
-  --kyu-success: #aec5a4;
+  --kyu-canvas: #000;
+  --kyu-panel: #111;
+  --kyu-surface: #191919;
+  --kyu-surface-hover: #252525;
+  --kyu-ink: #f1f1f1;
+  --kyu-text: #ccc;
+  --kyu-muted: #aaa;
+  --kyu-placeholder: #aaa;
+  --kyu-accent: #ddd;
+  --kyu-accent-soft: #232323;
+  --kyu-action: #e5e5e5;
+  --kyu-action-hover: #fff;
+  --kyu-on-action: #000;
+  --kyu-border: #363636;
+  --kyu-control-border: #858585;
+  --kyu-focus: #ddd;
+  --kyu-success: #ccc;
   --kyu-warning: #dfbd91;
-  --kyu-warning-soft: #352e23;
+  --kyu-warning-soft: #282116;
   --kyu-danger: #eda99d;
-  --kyu-danger-soft: #382825;
-  --kyu-disabled: #788574;
+  --kyu-danger-soft: #2c1d1b;
+  --kyu-disabled: #777;
   --kyu-shadow-overlay: 0 8px 24px rgb(0 0 0 / 24%);
 }
 

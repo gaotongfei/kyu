@@ -1,4 +1,4 @@
-import { exportMarkdown, fileName } from '../../markdown';
+import { fileName } from '../../markdown';
 import { ResumeError } from '../../model';
 import { getResume } from '../../storage';
 
@@ -15,7 +15,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         { status: 409, headers }
       );
     }
-    return new Response(exportMarkdown(resume.sections), {
+    return new Response(resume.contentMarkdown, {
       headers: {
         ...headers,
         'Content-Type': 'text/markdown; charset=utf-8',

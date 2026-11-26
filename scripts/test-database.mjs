@@ -16,7 +16,8 @@ try {
   const address = run('docker', ['port', container, '5432/tcp']).trim();
   if (!/^127\.0\.0\.1:\d+$/.test(address)) throw new Error('Test database must bind only to loopback.');
   const env = { ...process.env, DATABASE_URL: `postgresql://kyu:kyu@${address}/kyu_resume_test`, RESUME_TEST_DATABASE: 'isolated', NODE_ENV: 'test' };
-  console.log('Applying committed migrations to a new ephemeral PostgreSQL container.');
+  console.log('Applying schema migrations to a new ephemeral PostgreSQL container.');
+  run('yarn', ['db:migrate'], { env, stdio: 'inherit' });
   run('yarn', ['db:migrate'], { env, stdio: 'inherit' });
   run('yarn', ['tsx', '--test', 'tests/storage.integration.ts'], { env: { ...env, NODE_OPTIONS: `${process.env.NODE_OPTIONS || ''} --conditions=react-server` }, stdio: 'inherit' });
 } finally {

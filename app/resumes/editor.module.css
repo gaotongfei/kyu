@@ -135,9 +135,7 @@
 .primaryButton,
 .dangerButton,
 .iconButton,
-.textButton,
-.removeButton,
-.addButton {
+.textButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -162,8 +160,7 @@
 
 .button:hover:not(:disabled),
 .iconButton:hover:not(:disabled),
-.textButton:hover:not(:disabled),
-.addButton:hover:not(:disabled) {
+.textButton:hover:not(:disabled) {
   background: var(--kyu-surface-hover);
   color: var(--kyu-ink);
 }
@@ -198,24 +195,9 @@
   color: var(--kyu-muted);
 }
 
-.textButton,
-.removeButton,
-.addButton {
+.textButton {
   border-color: transparent;
   padding-inline: var(--kyu-space-2);
-}
-
-.removeButton {
-  color: var(--kyu-danger);
-}
-
-.removeButton:hover:not(:disabled) {
-  background: var(--kyu-danger-soft);
-}
-
-.addButton {
-  margin-top: var(--kyu-space-3);
-  color: var(--kyu-accent);
 }
 
 .editor button:disabled,
@@ -258,84 +240,11 @@
   font-weight: var(--kyu-weight-medium);
 }
 
-.caption {
-  color: var(--kyu-muted);
-  font-size: var(--kyu-type-caption);
-  font-weight: var(--kyu-weight-regular);
-}
-
 .fieldset {
   min-width: 0;
   margin: 0;
   padding: 0;
   border: 0;
-}
-
-.section {
-  min-width: 0;
-  border-top: var(--kyu-stroke) solid var(--kyu-border);
-}
-
-.sectionHead {
-  display: flex;
-  align-items: center;
-  gap: var(--kyu-space-2);
-  padding-block: var(--kyu-space-2);
-}
-
-.sectionHead h3 {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  font-size: var(--kyu-type-small);
-  font-weight: var(--kyu-weight-medium);
-}
-
-.sectionToggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--kyu-space-2);
-  width: 100%;
-  min-height: var(--kyu-control-height);
-  padding: var(--kyu-space-1) 0;
-  border: 0;
-  border-radius: var(--kyu-radius-xs);
-  background: transparent;
-  color: var(--kyu-text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.sectionToggle > span:first-child {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.sectionToggle:hover:not(:disabled) {
-  color: var(--kyu-accent);
-}
-
-.expandedChevron,
-.collapsedChevron {
-  display: flex;
-  flex-shrink: 0;
-  color: var(--kyu-muted);
-}
-
-.expandedChevron {
-  transform: rotate(180deg);
-}
-
-.sectionControls {
-  display: flex;
-  flex-shrink: 0;
-  gap: var(--kyu-space-1);
-}
-
-.sectionBody {
-  padding-block: var(--kyu-space-2) var(--kyu-space-5);
 }
 
 .label {
@@ -371,10 +280,6 @@
   border-color: var(--kyu-accent);
 }
 
-.contentLabel {
-  margin-top: var(--kyu-space-4);
-}
-
 .textarea {
   display: block;
   min-height: 14rem;
@@ -385,13 +290,9 @@
   overflow-wrap: anywhere;
 }
 
-.sectionFoot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--kyu-space-2);
-  margin-top: var(--kyu-space-3);
+.textarea.sourceTextarea {
+  min-height: 36rem;
+  padding: var(--kyu-space-4);
 }
 
 .helper {
@@ -441,24 +342,6 @@
   margin: 0;
   font-size: var(--kyu-type-subheading);
   font-weight: var(--kyu-weight-medium);
-}
-
-.empty p {
-  max-width: var(--kyu-reading);
-  margin-block: var(--kyu-space-3) var(--kyu-space-5);
-  color: var(--kyu-text);
-}
-
-.footer {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: var(--kyu-space-3);
-  margin-top: var(--kyu-space-6);
-  padding-block: var(--kyu-space-5);
-  border-top: var(--kyu-stroke) solid var(--kyu-border);
-  color: var(--kyu-muted);
-  font-size: var(--kyu-type-caption);
 }
 
 /* Portals are outside .editor, so explicitly scope their typography and palette. */
@@ -608,17 +491,8 @@
   padding-left: var(--kyu-space-5);
 }
 
-.importSection {
+.importDraft {
   margin-top: var(--kyu-space-5);
-  padding-top: var(--kyu-space-4);
-  border-top: var(--kyu-stroke) solid var(--kyu-border);
-}
-
-.importSection h3 {
-  margin: 0 0 var(--kyu-space-4);
-  color: var(--kyu-text);
-  font-size: var(--kyu-type-small);
-  font-weight: var(--kyu-weight-medium);
 }
 
 .editor :is(button, a, input, textarea):focus-visible,
@@ -644,6 +518,10 @@
   .workspace {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--kyu-space-8);
+  }
+
+  .textarea.sourceTextarea {
+    min-height: 28rem;
   }
 }
 

@@ -1,5 +1,5 @@
 import React, { type ReactNode } from 'react';
-// Node-only: preview and download must both call this renderer, never an HTML template.
+// Node-only PDF export adapter; the live HTML preview shares its safe AST and theme.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -12,8 +12,9 @@ import {
   Text,
   View,
 } from '@react-pdf/renderer';
-import { Lexer, type Token } from 'marked';
+import { CLASSIC_THEME } from './classic-theme';
 import type { Resume } from './model';
+import { parseResumeMarkdown, type BlockNode, type InlineNode } from './resume-markdown';
 
 // Renderer-only alias for the unmodified Lato faces, not a custom-designed font.
 // Attribution and license: fonts/OFL.txt.
@@ -64,245 +65,147 @@ function hyphenate(word: string) {
 // Classic uses the pack's semantic ink, accent, surface, and rule colors, in print points.
 const styles = StyleSheet.create({
   page: {
-    paddingTop: 42,
-    paddingBottom: 42,
-    paddingHorizontal: 48,
+    paddingTop: CLASSIC_THEME.paddingTop,
+    paddingBottom: CLASSIC_THEME.paddingBottom,
+    paddingHorizontal: CLASSIC_THEME.paddingHorizontal,
     fontFamily: FAMILY,
-    fontSize: 10.5,
-    lineHeight: 1.45,
-    color: '#272c28',
-    backgroundColor: '#ffffff',
+    fontSize: CLASSIC_THEME.fontSize,
+    lineHeight: CLASSIC_THEME.lineHeight,
+    color: CLASSIC_THEME.ink,
+    backgroundColor: CLASSIC_THEME.paper,
   },
-  paragraph: { marginBottom: 7 },
-  sectionTitle: { fontSize: 13, fontWeight: 700, marginTop: 12, marginBottom: 7 },
-  heading: { fontWeight: 700, marginTop: 8, marginBottom: 6, lineHeight: 1.25 },
+  paragraph: { marginBottom: CLASSIC_THEME.paragraphGap },
+  heading: {
+    fontWeight: 700,
+    marginTop: CLASSIC_THEME.headingBefore,
+    marginBottom: CLASSIC_THEME.headingAfter,
+    lineHeight: CLASSIC_THEME.headingLineHeight,
+  },
   strong: { fontWeight: 700 },
   emphasis: { fontStyle: 'italic' },
-  link: { color: '#516c55', textDecoration: 'underline' },
-  quote: { borderLeftWidth: 1, borderLeftColor: '#858f82', paddingLeft: 10, marginBottom: 7 },
-  rule: { borderBottomWidth: 0.6, borderBottomColor: '#e5e8e1', marginVertical: 9 },
-  code: { fontSize: 9.5, backgroundColor: '#f5f6f3' },
-  codeBlock: { fontSize: 9.5, backgroundColor: '#f5f6f3', padding: 8, marginBottom: 7 },
-  listItem: { flexDirection: 'row', marginBottom: 3 },
-  marker: { width: 24, flexShrink: 0 },
+  link: { color: CLASSIC_THEME.accent, textDecoration: 'underline' },
+  quote: {
+    borderLeftWidth: 1,
+    borderLeftColor: CLASSIC_THEME.controlBorder,
+    paddingLeft: CLASSIC_THEME.quoteInset,
+    marginBottom: CLASSIC_THEME.paragraphGap,
+  },
+  rule: {
+    borderBottomWidth: CLASSIC_THEME.ruleWidth,
+    borderBottomColor: CLASSIC_THEME.border,
+    marginVertical: CLASSIC_THEME.ruleGap,
+  },
+  code: { fontSize: CLASSIC_THEME.codeSize, backgroundColor: CLASSIC_THEME.surface },
+  codeBlock: {
+    fontSize: CLASSIC_THEME.codeSize,
+    backgroundColor: CLASSIC_THEME.surface,
+    padding: CLASSIC_THEME.codePadding,
+    marginBottom: CLASSIC_THEME.paragraphGap,
+  },
+  listItem: { flexDirection: 'row', marginBottom: CLASSIC_THEME.listItemGap },
+  marker: { width: CLASSIC_THEME.listMarkerWidth, flexShrink: 0 },
   listBody: { flexGrow: 1, flexShrink: 1, minWidth: 0 },
 });
 
-// Decode references as text only. Neither these strings nor raw Markdown ever enter HTML.
-function text(value: string) {
-  const named: Record<string, string> = {
-    amp: '&',
-    lt: '<',
-    gt: '>',
-    quot: '"',
-    apos: "'",
-    nbsp: '\u00a0',
-    copy: '©',
-    reg: '®',
-    hellip: '…',
-    ndash: '–',
-    mdash: '—',
-  };
-  return value.replace(/&(#x[\da-f]+|#\d+|[a-z]+);/gi, (whole, entity: string) => {
-    if (!entity.startsWith('#')) {
-      return named[entity.toLowerCase()] ?? whole;
+function inline(nodes: InlineNode[]): ReactNode[] {
+  return nodes.map((node, i) => {
+    switch (node.type) {
+      case 'text':
+        return node.text;
+      case 'strong':
+        return (
+          <Text key={i} style={styles.strong}>
+            {inline(node.children)}
+          </Text>
+        );
+      case 'em':
+        return (
+          <Text key={i} style={styles.emphasis}>
+            {inline(node.children)}
+          </Text>
+        );
+      case 'code':
+        return (
+          <Text key={i} style={styles.code}>
+            {node.text}
+          </Text>
+        );
+      case 'break':
+        return '\n';
+      case 'link':
+        return (
+          <Link key={i} src={node.href} style={styles.link}>
+            {inline(node.children)}
+          </Link>
+        );
+      default:
+        throw new Error('Unsupported Classic inline node.');
     }
-    const point =
-      entity[1].toLowerCase() === 'x'
-        ? parseInt(entity.slice(2), 16)
-        : parseInt(entity.slice(1), 10);
-    return point > 0 && point <= 0x10ffff && !(point >= 0xd800 && point <= 0xdfff)
-      ? String.fromCodePoint(point)
-      : '�';
   });
 }
 
-function safeHref(href: string): string | null {
-  const decoded = text(href);
-  const hasControls = Array.from(decoded).some(
-    (character) => character.charCodeAt(0) <= 32 || character.charCodeAt(0) === 127
-  );
-  if (hasControls || !/^(https?:\/\/|mailto:)/i.test(decoded)) {
-    return null;
-  }
-  try {
-    const url = new URL(decoded);
-    return ['https:', 'http:', 'mailto:'].includes(url.protocol) ? url.href : null;
-  } catch {
-    return null;
-  }
+function blocks(nodes: BlockNode[]): ReactNode[] {
+  return nodes.map((node, i) => {
+    switch (node.type) {
+      case 'heading':
+        return (
+          <Text
+            key={i}
+            minPresenceAhead={24}
+            style={[styles.heading, { fontSize: CLASSIC_THEME.headingSizes[node.depth - 1] }]}
+          >
+            {inline(node.children)}
+          </Text>
+        );
+      case 'paragraph':
+        return (
+          <Text key={i} style={styles.paragraph}>
+            {inline(node.children)}
+          </Text>
+        );
+      case 'quote':
+        return (
+          <View key={i} style={styles.quote}>
+            {blocks(node.children)}
+          </View>
+        );
+      case 'rule':
+        return <View key={i} style={styles.rule} />;
+      case 'code':
+        // Keep code literal, without syntax highlighting or external resources.
+        return (
+          <Text key={i} style={styles.codeBlock}>
+            {node.text}
+          </Text>
+        );
+      case 'list':
+        return (
+          <View key={i}>
+            {node.items.map((item, index) => (
+              <View key={index} style={styles.listItem}>
+                <Text style={styles.marker}>{node.ordered ? `${node.start + index}.` : '•'}</Text>
+                <View style={styles.listBody}>{blocks(item)}</View>
+              </View>
+            ))}
+          </View>
+        );
+      default:
+        throw new Error('Unsupported Classic block node.');
+    }
+  });
 }
 
 export async function renderResumePdf(
-  resume: Pick<Resume, 'name' | 'sections'>
+  resume: Pick<Resume, 'name' | 'contentMarkdown'>
 ): Promise<{ buffer: Buffer; warnings: string[] }> {
   registerFonts();
-  // A fresh lexer avoids shared marked extensions/options changing this allowlist.
-  const options = { gfm: true, breaks: false };
-  const warnings = new Set<string>();
-  const unsupported = (token: Token) => {
-    const label = {
-      html: 'Raw HTML',
-      image: 'Images',
-      table: 'Tables',
-      del: 'Strikethrough',
-      checkbox: 'Task lists',
-    }[token.type];
-    warnings.add(
-      `${label ?? `Markdown token “${token.type}”`}: unsupported in Classic PDF; its source is displayed as text.`
-    );
-    return token.raw || ('text' in token ? String(token.text) : '');
-  };
-
-  function inline(tokens: Token[] = [], insideLink = false): ReactNode[] {
-    return tokens.map((token, i) => {
-      switch (token.type) {
-        case 'text':
-          return token.tokens
-            ? inline(token.tokens, insideLink)
-            : text(token.text).replace(/\n/g, ' ');
-        case 'escape':
-          return token.text;
-        case 'strong':
-          return (
-            <Text key={i} style={styles.strong}>
-              {inline(token.tokens, insideLink)}
-            </Text>
-          );
-        case 'em':
-          return (
-            <Text key={i} style={styles.emphasis}>
-              {inline(token.tokens, insideLink)}
-            </Text>
-          );
-        case 'codespan':
-          return (
-            <Text key={i} style={styles.code}>
-              {token.text}
-            </Text>
-          );
-        case 'br':
-          return '\n';
-        case 'link': {
-          const href = safeHref(token.href);
-          if (!href) {
-            warnings.add(
-              'An unsafe or unsupported link destination was disabled; its Markdown source is displayed as text.'
-            );
-            return token.raw;
-          }
-          if (insideLink) {
-            return inline(token.tokens, true);
-          }
-          return (
-            <Link key={i} src={href} style={styles.link}>
-              {inline(token.tokens, true)}
-            </Link>
-          );
-        }
-        default:
-          return unsupported(token);
-      }
-    });
-  }
-
-  function blocks(tokens: Token[] = []): ReactNode[] {
-    return tokens.map((token, i) => {
-      switch (token.type) {
-        case 'space':
-        case 'def':
-          return null;
-        case 'heading':
-          return (
-            <Text
-              key={i}
-              minPresenceAhead={24}
-              style={[styles.heading, { fontSize: [22, 15, 12, 11, 10.5, 10.5][token.depth - 1] }]}
-            >
-              {inline(token.tokens)}
-            </Text>
-          );
-        case 'paragraph':
-        case 'text':
-          return (
-            <Text key={i} style={styles.paragraph}>
-              {token.tokens ? inline(token.tokens) : text(token.text)}
-            </Text>
-          );
-        case 'blockquote':
-          return (
-            <View key={i} style={styles.quote}>
-              {blocks(token.tokens)}
-            </View>
-          );
-        case 'hr':
-          return <View key={i} style={styles.rule} />;
-        case 'code':
-          // Keep code literal, without syntax highlighting or external resources.
-          return (
-            <Text key={i} style={styles.codeBlock}>
-              {token.text}
-            </Text>
-          );
-        case 'list':
-          return (
-            <View key={i}>
-              {(token.items as import('marked').Tokens.ListItem[]).map((item, index) => {
-                if (item.task) {
-                  return (
-                    <Text key={index} style={styles.paragraph}>
-                      {unsupported({ ...item, type: 'checkbox' })}
-                    </Text>
-                  );
-                }
-                return (
-                  <View key={index} style={styles.listItem}>
-                    <Text style={styles.marker}>
-                      {token.ordered ? `${Number(token.start) + index}.` : '•'}
-                    </Text>
-                    <View style={styles.listBody}>{blocks(item.tokens)}</View>
-                  </View>
-                );
-              })}
-            </View>
-          );
-        default:
-          return (
-            <Text key={i} style={styles.paragraph}>
-              {unsupported(token)}
-            </Text>
-          );
-      }
-    });
-  }
-
-  const references = Object.assign(
-    Object.create(null),
-    ...resume.sections
-      .map((section) => new Lexer(options).lex(section.contentMarkdown).links)
-      .reverse()
-  );
-  function sectionLexer() {
-    const lexer = new Lexer(options);
-    lexer.tokens.links = Object.assign(Object.create(null), references);
-    return lexer;
-  }
-  const content = resume.sections.map((section) => (
-    <View key={section.id}>
-      {section.titleMarkdown.trim() && (
-        <Text style={styles.sectionTitle} minPresenceAhead={24}>
-          {inline(sectionLexer().inlineTokens(section.titleMarkdown))}
-        </Text>
-      )}
-      {blocks(sectionLexer().lex(section.contentMarkdown))}
-    </View>
-  ));
+  const parsed = parseResumeMarkdown(resume.contentMarkdown);
   const buffer = await renderToBuffer(
     <Document title={resume.name} creator="Kyu" language="en">
-      <Page size="LETTER" wrap style={styles.page}>
-        {content}
+      <Page size={[CLASSIC_THEME.pageWidth, CLASSIC_THEME.pageHeight]} wrap style={styles.page}>
+        {blocks(parsed.blocks)}
       </Page>
     </Document>
   );
-  return { buffer, warnings: [...warnings] };
+  return { buffer, warnings: parsed.warnings };
 }

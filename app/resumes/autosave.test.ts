@@ -4,7 +4,7 @@ import type { Result, Resume } from './model';
 const document: Resume = {
   id: 'test-document',
   name: 'Base',
-  sections: [],
+  contentMarkdown: '',
   themeKey: 'classic',
   version: 1,
   createdAt: '',
@@ -46,18 +46,21 @@ it('serializes in-flight edits and flushes them against acknowledged versions', 
   const second = deferred<Result<Resume>>();
   const write = jest.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
   const queue = new Autosave(document, write);
-  queue.edit({ ...document, name: 'First' });
+  queue.edit({ ...document, contentMarkdown: '# First\n' });
   const flushed = queue.flush();
-  queue.edit({ ...document, name: 'Newest' });
+  queue.edit({ ...document, contentMarkdown: '# Newest\r\n\r\n## Any heading\r\n' });
   expect(write).toHaveBeenCalledTimes(1);
-  first.resolve({ ok: true, value: { ...document, name: 'First', version: 2 } });
+  first.resolve({ ok: true, value: { ...document, contentMarkdown: '# First\n', version: 2 } });
   await Promise.resolve();
   expect(write).toHaveBeenCalledTimes(2);
   expect(write.mock.calls[1][1]).toBe(2);
-  expect(write.mock.calls[1][2].name).toBe('Newest');
+  expect(write.mock.calls[1][2].contentMarkdown).toBe('# Newest\r\n\r\n## Any heading\r\n');
   expect(queue.getSnapshot().status).toBe('saving');
-  second.resolve({ ok: true, value: { ...document, name: 'Newest', version: 3 } });
-  expect((await flushed)?.name).toBe('Newest');
+  second.resolve({
+    ok: true,
+    value: { ...document, contentMarkdown: '# Newest\r\n\r\n## Any heading\r\n', version: 3 },
+  });
+  expect((await flushed)?.contentMarkdown).toBe('# Newest\r\n\r\n## Any heading\r\n');
   expect(queue.getSnapshot().dirty).toBe(false);
   queue.dispose();
 });

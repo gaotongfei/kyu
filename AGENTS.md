@@ -1,0 +1,12 @@
+# Working agreements
+
+## UI copy
+
+- Keep labels and status text short and specific to the user's task.
+- Avoid routine explanatory copy, implementation narration, and self-evident helper paragraphs. For example, do not explain that the preview is live, when PDFs are generated, or that Markdown is saved as written.
+- Keep actionable validation, import limitations, destructive-action warnings, and error/recovery guidance.
+
+## Reviews and commits
+
+- Leave changes uncommitted for the user to review. Commit only after explicit approval.
+- Do not push, deploy, or open a pull request unless requested.

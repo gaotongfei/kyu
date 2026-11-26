@@ -1,5 +1,4 @@
-import { randomUUID } from 'node:crypto';
-import { importMarkdown } from '../markdown';
+import { validMarkdown } from '../model';
 import { extractPdfDraft } from '../pdf-import';
 
 export const runtime = 'nodejs';
@@ -37,8 +36,8 @@ export async function POST(request: Request) {
     });
     const form = await multipart.formData();
     const file = form.get('file');
-    if (!(file instanceof File) || !file.size) {
-      throw new Error('Choose a nonempty .md or .pdf file.');
+    if (!(file instanceof File) || !file.name) {
+      throw new Error('Choose a .md or .pdf file.');
     }
     if (file.size > limit) {
       throw new Error('Files must be 10 MiB or smaller.');
@@ -55,10 +54,11 @@ export async function POST(request: Request) {
     name ||= 'Imported resume';
     if (/\.pdf$/i.test(file.name)) {
       const draft = await extractPdfDraft(bytes);
+      validMarkdown(draft.markdown);
       return Response.json(
         {
           name,
-          sections: [{ id: randomUUID(), titleMarkdown: '', contentMarkdown: draft.markdown }],
+          contentMarkdown: draft.markdown,
           warnings: draft.warnings,
           kind: 'pdf',
         },
@@ -70,14 +70,12 @@ export async function POST(request: Request) {
     }
     let source: string;
     try {
-      source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      source = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
     } catch {
       throw new Error('Markdown must be a UTF-8 text file.');
     }
-    return Response.json(
-      { name, sections: importMarkdown(source, randomUUID), warnings: [], kind: 'md' },
-      { headers }
-    );
+    validMarkdown(source);
+    return Response.json({ name, contentMarkdown: source, warnings: [], kind: 'md' }, { headers });
   } catch (error) {
     return Response.json(
       { error: error instanceof Error ? error.message : 'Could not import this file.' },

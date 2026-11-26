@@ -6,16 +6,12 @@ import { extractText, extractTextItems, getDocumentProxy } from 'unpdf';
 import type { Resume } from '../app/resumes/model';
 import { renderResumePdf } from '../app/resumes/pdf';
 import { extractPdfDraft, MAX_PDF_BYTES, MAX_PDF_PAGES } from '../app/resumes/pdf-import';
+import { parseResumeMarkdown } from '../app/resumes/resume-markdown';
 
 const h = React.createElement;
-const section = (contentMarkdown: string, titleMarkdown = '', id = 'fixture-section') => ({
-  id,
-  titleMarkdown,
-  contentMarkdown,
-});
-const resume = (...sections: Resume['sections']): Pick<Resume, 'name' | 'sections'> => ({
+const resume = (...source: string[]): Pick<Resume, 'name' | 'contentMarkdown'> => ({
   name: 'Generated integration fixture',
-  sections,
+  contentMarkdown: source.join('\n\n'),
 });
 
 // All fixtures are generated in memory; no personal documents, network, or saved uploads.
@@ -55,7 +51,7 @@ test('PDF text round-trips through the reviewed Markdown draft literally, withou
     'mailto:john@example.com',
   ]) {
     const draft = await extractPdfDraft(new Uint8Array(await fixture([original])));
-    const { buffer } = await renderResumePdf(resume(section(draft.markdown)));
+    const { buffer } = await renderResumePdf(resume(draft.markdown));
     const result = await textOf(buffer);
     assert.equal(result, original);
     const pdf = await parsed(buffer);
@@ -69,7 +65,7 @@ test('PDF text round-trips through the reviewed Markdown draft literally, withou
 
 test('prototype-name references remain literal unless explicitly defined', async () => {
   const literal = await renderResumePdf(
-    resume(section('[constructor] [__proto__] [toString]', '[constructor]'))
+    resume('# [constructor]', '[constructor] [__proto__] [toString]')
   );
   assert.match(await textOf(literal.buffer), /\[constructor\] \[proto\] \[toString\]/);
   const literalPdf = await parsed(literal.buffer);
@@ -80,12 +76,9 @@ test('prototype-name references remain literal unless explicitly defined', async
   }
   const defined = await renderResumePdf(
     resume(
-      section(
-        '[constructor]: https://example.com/constructor\n[__proto__]: https://example.com/proto\n',
-        '',
-        'definitions'
-      ),
-      section('[constructor] [__proto__]', '[constructor]', 'references')
+      '# [constructor]',
+      '[constructor] [__proto__]',
+      '[constructor]: https://example.com/constructor\n[__proto__]: https://example.com/proto\n'
     )
   );
   const pdf = await parsed(defined.buffer);
@@ -100,11 +93,12 @@ test('prototype-name references remain literal unless explicitly defined', async
   }
 });
 
-test('reference links resolve across imported section boundaries', async () => {
+test('reference links resolve forward throughout whole-source Markdown', async () => {
   const { buffer } = await renderResumePdf(
     resume(
-      section('[portfolio]: https://example.com/portfolio\n', '', 'intro'),
-      section('[Visit][portfolio]\n', 'Work', 'work')
+      '# [Work][portfolio]',
+      '[Visit][portfolio]',
+      '[portfolio]: https://example.com/portfolio\n'
     )
   );
   const pdf = await parsed(buffer);
@@ -116,52 +110,120 @@ test('reference links resolve across imported section boundaries', async () => {
   }
 });
 
+test('PDF link annotations share entity/escape decoding and reject control-obfuscated destinations', async () => {
+  const document = resume(
+    String.raw`[Query](https://example.com/a\(b\)?a=1&amp;b=2)`,
+    '[Decode once](https://example.com/?literal=&amp;amp;)',
+    '[Control](https://example.com/&#x0a;path)',
+    '[Encoded](jav&#x61;script:alert%281%29)'
+  );
+  const { buffer, warnings } = await renderResumePdf(document);
+  assert.deepEqual(warnings, parseResumeMarkdown(document.contentMarkdown).warnings);
+  assert.equal(warnings.length, 1);
+  const text = await textOf(buffer);
+  assert.ok(text.includes('[Control](https://example.com/&#x0a;path)'));
+  assert.ok(text.includes('[Encoded](jav&#x61;script:alert%281%29)'));
+  const pdf = await parsed(buffer);
+  try {
+    const annotations = await (await pdf.getPage(1)).getAnnotations();
+    assert.deepEqual(
+      annotations.map((annotation) => annotation.url),
+      ['https://example.com/a(b)?a=1&b=2', 'https://example.com/?literal=&amp;']
+    );
+  } finally {
+    await pdf.loadingTask.destroy();
+  }
+});
+
+test('PDF adapter preserves shared AST warnings, first reference definitions, and literal task source', async () => {
+  const document = resume(
+    [
+      '# [constructor]',
+      '',
+      '1. First supported item',
+      '2. [x] **task source** [not a link](https://example.invalid/task)',
+      '3. Third supported item',
+      '',
+      '[Portfolio][constructor] and [relative](//example.invalid/path)',
+      '',
+      '[constructor]: https://example.com/first',
+      '[constructor]: https://example.com/second',
+    ].join('\n'),
+    '[constructor]: https://example.com/later\n\nFinal body'
+  );
+  const { buffer, warnings } = await renderResumePdf(document);
+  assert.deepEqual(warnings, parseResumeMarkdown(document.contentMarkdown).warnings);
+  assert.deepEqual(warnings, [
+    'Task lists: unsupported in Classic; its source is displayed as text.',
+    'An unsafe or unsupported link destination was disabled; its Markdown source is displayed as text.',
+  ]);
+  const text = await textOf(buffer);
+  for (const phrase of [
+    '1. First supported item',
+    '2. [x] **task source** [not a link](https://example.invalid/task)',
+    '3. Third supported item',
+    '[relative](//example.invalid/path)',
+    'Final body',
+  ]) {
+    assert.ok(text.includes(phrase), `Shared AST source missing from PDF: ${phrase}\n${text}`);
+  }
+  const pdf = await parsed(buffer);
+  try {
+    const annotations = await (await pdf.getPage(1)).getAnnotations();
+    assert.deepEqual(
+      [...new Set(annotations.map((annotation) => annotation.url))],
+      ['https://example.com/first']
+    );
+  } finally {
+    await pdf.loadingTask.destroy();
+  }
+});
+
 test('Classic renders selectable common Markdown, accented text, and four embedded licensed font faces', async () => {
   const { buffer, warnings } = await renderResumePdf(
     resume(
-      section(
-        [
-          '# José Noël — résumé',
-          '',
-          'Plain text, **bold face**, *italic face*, and ***bold italic face***. A &amp; B.',
-          '',
-          'A soft',
-          'line break stays in its paragraph.',
-          '',
-          '## Heading two',
-          '### Heading three',
-          '#### Heading four',
-          '##### Heading five',
-          '###### Heading six',
-          '',
-          '- First bullet',
-          '- Second bullet',
-          '  - Nested bullet',
-          '',
-          '3. Third ordered item',
-          '4. Fourth ordered item',
-          '',
-          '> A useful quotation.',
-          '',
-          'First hard line  ',
-          'Second hard line with `const code = 1`.',
-          '',
-          '```ts',
-          'function example() {',
-          '  return "literal <tag> & value";',
-          '}',
-          '```',
-          '',
-          '---',
-          '',
-          '[Portfolio](https://example.com/work) and [Email](mailto:fixture@example.com).',
-          '',
-          '[Reference][ref]',
-          '',
-          '[ref]: https://example.com/reference',
-        ].join('\n')
-      ),
-      section('Unique final paragraph.', '**Experience** and *Education*', 'second')
+      [
+        '# José Noël — résumé',
+        '',
+        'Plain text, **bold face**, *italic face*, and ***bold italic face***. A &amp; B.',
+        '',
+        'A soft',
+        'line break stays in its paragraph.',
+        '',
+        '## Heading two',
+        '### Heading three',
+        '#### Heading four',
+        '##### Heading five',
+        '###### Heading six',
+        '',
+        '- First bullet',
+        '- Second bullet',
+        '  - Nested bullet',
+        '',
+        '3. Third ordered item',
+        '4. Fourth ordered item',
+        '',
+        '> A useful quotation.',
+        '',
+        'First hard line  ',
+        'Second hard line with `const code = 1`.',
+        '',
+        '```ts',
+        'function example() {',
+        '  return "literal <tag> & value";',
+        '}',
+        '```',
+        '',
+        '---',
+        '',
+        '[Portfolio](https://example.com/work) and [Email](mailto:fixture@example.com).',
+        '',
+        '[Reference][ref]',
+        '',
+        '[ref]: https://example.com/reference',
+      ].join('\n'),
+      '## **Experience** and *Education*',
+      'Unique final paragraph.'
     )
   );
   assert.deepEqual(warnings, []);
@@ -196,7 +258,7 @@ test('Classic renders selectable common Markdown, accented text, and four embedd
     assert.equal(
       text.match(/José Noël/g)?.length,
       1,
-      'sections must not duplicate earlier lexer tokens'
+      'whole-source traversal must not duplicate earlier content'
     );
     const links = (await (await pdf.getPage(1)).getAnnotations()).map(
       (annotation) => annotation.url
@@ -236,12 +298,7 @@ test('long content naturally paginates without text loss, clipping, or shrinking
   );
   const unbroken = 'W'.repeat(1200);
   const { buffer, warnings } = await renderResumePdf(
-    resume(
-      section(
-        [...paragraphs, unbroken, 'END OF GENERATED RESUME'].join('\n\n'),
-        'Employment history'
-      )
-    )
+    resume('# Employment history', ...paragraphs, unbroken, 'END OF GENERATED RESUME')
   );
   assert.deepEqual(warnings, []);
   const pdf = await parsed(buffer);
@@ -306,7 +363,7 @@ test('unsupported Markdown remains readable, unsafe links are inactive, and Mark
   };
   try {
     const { buffer, warnings } = await renderResumePdf(
-      resume(section(source, '![title image](https://example.invalid/title.png)'))
+      resume('## ![heading image](https://example.invalid/title.png)', source)
     );
     for (const label of [
       'Tables',
@@ -334,7 +391,7 @@ test('unsupported Markdown remains readable, unsafe links are inactive, and Mark
       'javascript:',
       'file:///',
       'data:text/html',
-      '![title image]',
+      '![heading image]',
     ]) {
       assert.ok(text.includes(phrase), `Unsupported source disappeared: ${phrase}\n${text}`);
     }
@@ -365,8 +422,8 @@ test('unsupported Markdown remains readable, unsafe links are inactive, and Mark
 
 test('renderer warnings and content are isolated across simultaneous requests', async () => {
   const [first, second] = await Promise.all([
-    renderResumePdf(resume(section('![unsupported](https://example.invalid/image.png)'))),
-    renderResumePdf(resume(section('Independent document text.'))),
+    renderResumePdf(resume('![unsupported](https://example.invalid/image.png)')),
+    renderResumePdf(resume('Independent document text.')),
   ]);
   assert.equal(first.warnings.length, 1);
   assert.deepEqual(second.warnings, []);
@@ -374,11 +431,11 @@ test('renderer warnings and content are isolated across simultaneous requests', 
   assert.ok(!(await textOf(first.buffer)).includes('Independent document text'));
 });
 
-test('empty optional section titles are omitted, inline title Markdown is rendered, and empty documents are valid PDFs', async () => {
+test('whole-source inline heading Markdown is rendered and empty documents are valid PDFs', async () => {
   const { buffer } = await renderResumePdf(
-    resume(section('Intro body'), section('Section body', '**Skills** with `code`', 'two'))
+    resume('Intro body', '## **Skills** with `code`', 'Body text')
   );
-  assert.equal(await textOf(buffer), 'Intro body\nSkills with code\nSection body');
+  assert.equal(await textOf(buffer), 'Intro body\nSkills with code\nBody text');
   const empty = await renderResumePdf(resume());
   const pdf = await parsed(empty.buffer);
   try {
@@ -391,7 +448,7 @@ test('empty optional section titles are omitted, inline title Markdown is render
 
 test('extractor produces a reviewable escaped text draft without inferring Markdown or detaching input', async () => {
   const { buffer } = await renderResumePdf(
-    resume(section('# Élodie García\n\nA careful paragraph with [a link](https://example.com).'))
+    resume('# Élodie García\n\nA careful paragraph with [a link](https://example.com).')
   );
   const bytes = new Uint8Array(buffer);
   const original = new Uint8Array(bytes);

@@ -11,16 +11,15 @@ import {
 import { Menu, Modal } from '@mantine/core';
 import { createDocument, deleteDocument, loadDocument, loadLibrary, saveDocument } from './actions';
 import { Autosave } from './autosave';
-import { exportMarkdown, fileName } from './markdown';
+import { fileName } from './markdown';
+import { MarkdownPreview } from './MarkdownPreview';
 import {
   validateInput,
   type Result,
   type Resume,
   type ResumeInput,
   type ResumeSummary,
-  type Section,
 } from './model';
-import { PdfPreview } from './PdfPreview';
 import styles from './editor.module.css';
 
 type EditorProps = {
@@ -30,15 +29,12 @@ type EditorProps = {
 };
 type ImportDraft = ResumeInput & { warnings: string[]; kind: 'md' | 'pdf' };
 type Dialog = 'new' | 'rename' | 'delete' | 'import' | null;
-type IconName = 'chevron' | 'up' | 'down' | 'plus' | 'more' | 'check';
+type IconName = 'chevron' | 'more' | 'check';
 
 function Icon({ name }: { name: IconName }) {
   return (
     <svg className={styles.icon} viewBox="0 0 24 24" aria-hidden="true">
       {name === 'chevron' && <path d="m6 9 6 6 6-6" />}
-      {name === 'up' && <path d="M12 19V5m-5 5 5-5 5 5" />}
-      {name === 'down' && <path d="M12 5v14m-5-5 5 5 5-5" />}
-      {name === 'plus' && <path d="M12 5v14M5 12h14" />}
       {name === 'check' && <path d="m5 12 4 4L19 6" />}
       {name === 'more' && (
         <>
@@ -107,8 +103,8 @@ function parseDraft(value: unknown): ImportDraft {
     (value.kind !== 'md' && value.kind !== 'pdf') ||
     !('name' in value) ||
     typeof value.name !== 'string' ||
-    !('sections' in value) ||
-    !Array.isArray(value.sections) ||
+    !('contentMarkdown' in value) ||
+    typeof value.contentMarkdown !== 'string' ||
     !('warnings' in value) ||
     !Array.isArray(value.warnings) ||
     !value.warnings.every((warning) => typeof warning === 'string')
@@ -118,12 +114,9 @@ function parseDraft(value: unknown): ImportDraft {
   try {
     const input = validateInput({
       name: value.name,
-      sections: value.sections,
+      contentMarkdown: value.contentMarkdown,
       themeKey: 'classic',
     });
-    if (value.kind === 'pdf' && input.sections.length !== 1) {
-      throw new Error('PDF imports must contain one block.');
-    }
     return { ...input, warnings: value.warnings, kind: value.kind };
   } catch {
     throw new OperationError('The imported draft was invalid. No resume has been created.');
@@ -473,7 +466,7 @@ export function Editor({ initialLibrary, initialDocument, initialError }: Editor
     try {
       const document = queue.getSnapshot().document;
       downloadBlob(
-        new Blob([exportMarkdown(document.sections)], { type: 'text/markdown;charset=utf-8' }),
+        new Blob([document.contentMarkdown], { type: 'text/markdown;charset=utf-8' }),
         fileName(`${document.name} - unsaved`, 'md')
       );
       setNotice('Unsaved Markdown backup downloaded. This does not save the resume to PostgreSQL.');
@@ -562,8 +555,7 @@ export function Editor({ initialLibrary, initialDocument, initialError }: Editor
               <LibraryMenu {...menuProps} document={null} />
               {!availabilityError && (
                 <section className={styles.empty} aria-label="Empty resume library">
-                  <h2>Your resumes, your sections.</h2>
-                  <p>Start with a blank resume or import a Markdown file or selectable-text PDF.</p>
+                  <h2>Your resumes.</h2>
                   <div className={styles.actions}>
                     <button
                       type="button"
@@ -586,10 +578,6 @@ export function Editor({ initialLibrary, initialDocument, initialError }: Editor
               )}
             </>
           )}
-          <footer className={styles.footer}>
-            <span>Private self-hosted instance · PostgreSQL autosave</span>
-            <span>Review before using.</span>
-          </footer>
         </main>
       </div>
       <Modal
@@ -618,10 +606,14 @@ export function Editor({ initialLibrary, initialDocument, initialError }: Editor
               createResume({
                 name: name.trim(),
                 themeKey: 'classic',
-                sections: [{ id: crypto.randomUUID(), titleMarkdown: '', contentMarkdown: '' }],
+                contentMarkdown: '',
               });
             } else if (draft) {
-              createResume({ name: name.trim(), sections: draft.sections, themeKey: 'classic' });
+              createResume({
+                name: name.trim(),
+                contentMarkdown: draft.contentMarkdown,
+                themeKey: 'classic',
+              });
             } else {
               importResume();
             }
@@ -640,8 +632,8 @@ export function Editor({ initialLibrary, initialDocument, initialError }: Editor
           <fieldset className={styles.fieldset} disabled={!!busy}>
             {dialog === 'delete' ? (
               <p className={styles.dialogCopy}>
-                Delete “{queue?.getSnapshot().document.name}”? This permanently removes the resume
-                and all its sections. This cannot be undone.
+                Delete “{queue?.getSnapshot().document.name}”? This permanently removes the resume.
+                This cannot be undone.
               </p>
             ) : dialog === 'import' && !draft ? (
               <>
@@ -682,8 +674,8 @@ export function Editor({ initialLibrary, initialDocument, initialError }: Editor
                     </p>
                     {draft.kind === 'pdf' && (
                       <p>
-                        PDF text is one editable block, not the original source or layout. Reading
-                        order and spacing may need correction. The uploaded PDF is not retained.
+                        PDF text does not preserve the original layout. Reading order and spacing
+                        may need correction. The uploaded PDF is not retained.
                       </p>
                     )}
                     {draft.warnings.length > 0 && (
@@ -714,33 +706,26 @@ export function Editor({ initialLibrary, initialDocument, initialError }: Editor
                     }
                   }}
                 />
-                {dialog === 'new' && (
-                  <p className={styles.helper}>
-                    Starts with one blank intro section. Add your own content and sections.
-                  </p>
-                )}
-                {draft?.sections.map((section, index) => (
-                  <div className={styles.importSection} key={section.id}>
-                    <h3>
-                      Section {index + 1}
-                      {draft.kind === 'pdf' ? ' · extracted PDF text' : ''}
-                    </h3>
-                    <SectionFields
-                      section={section}
-                      prefix="import"
-                      onChange={(changes) => {
+                {draft && (
+                  <div className={styles.importDraft}>
+                    <label className={styles.label} htmlFor="resume-import-draft">
+                      Markdown draft
+                    </label>
+                    <textarea
+                      id="resume-import-draft"
+                      className={styles.textarea}
+                      value={draft.contentMarkdown}
+                      rows={14}
+                      wrap="soft"
+                      spellCheck={false}
+                      onChange={(event) => {
                         if (!busyRef.current) {
-                          setDraft({
-                            ...draft,
-                            sections: draft.sections.map((item) =>
-                              item.id === section.id ? { ...item, ...changes } : item
-                            ),
-                          });
+                          setDraft({ ...draft, contentMarkdown: event.currentTarget.value });
                         }
                       }}
                     />
                   </div>
-                ))}
+                )}
               </>
             )}
             <div className={styles.dialogActions}>
@@ -773,47 +758,6 @@ export function Editor({ initialLibrary, initialDocument, initialError }: Editor
   );
 }
 
-function SectionFields({
-  section,
-  prefix,
-  onChange,
-}: {
-  section: Section;
-  prefix: string;
-  onChange: (changes: Partial<Pick<Section, 'titleMarkdown' | 'contentMarkdown'>>) => void;
-}) {
-  const id = `${prefix}-${section.id}`;
-  return (
-    <>
-      <label className={styles.label} htmlFor={`${id}-title`}>
-        Section title <span className={styles.caption}>(optional · Markdown)</span>
-      </label>
-      <input
-        id={`${id}-title`}
-        className={styles.input}
-        value={section.titleMarkdown}
-        maxLength={500}
-        onChange={(event) => onChange({ titleMarkdown: event.currentTarget.value })}
-      />
-      <label className={`${styles.label} ${styles.contentLabel}`} htmlFor={`${id}-body`}>
-        Content · Markdown
-      </label>
-      <textarea
-        id={`${id}-body`}
-        className={styles.textarea}
-        value={section.contentMarkdown}
-        rows={10}
-        spellCheck={false}
-        onChange={(event) => onChange({ contentMarkdown: event.currentTarget.value })}
-      />
-    </>
-  );
-}
-
-function sectionLabel(section: Section, index: number) {
-  return section.titleMarkdown.trim() || (index === 0 ? 'Intro / contact' : 'Untitled section');
-}
-
 function DocumentWorkspace({
   queue,
   overflowRef,
@@ -841,73 +785,19 @@ function DocumentWorkspace({
 }) {
   const snapshot = useSyncExternalStore(queue.subscribe, queue.getSnapshot, queue.getSnapshot);
   const { document } = snapshot;
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
-  const [removing, setRemoving] = useState<Section | null>(null);
-  const toggleRefs = useRef(new Map<string, HTMLButtonElement>());
-  const removeTrigger = useRef<HTMLButtonElement | null>(null);
-  const addRef = useRef<HTMLButtonElement>(null);
-
   useEffect(() => {
     if (!snapshot.dirty) {
       onAcknowledged(snapshot.document);
     }
   }, [snapshot, onAcknowledged]);
 
-  function editSections(sections: Section[]) {
-    if (!isLocked()) {
-      queue.edit({ ...queue.getSnapshot().document, sections });
-    }
-  }
-
-  function moveSection(index: number, direction: -1 | 1) {
-    const sections = [...queue.getSnapshot().document.sections];
-    const next = index + direction;
-    if (next < 0 || next >= sections.length) {
-      return;
-    }
-    [sections[index], sections[next]] = [sections[next], sections[index]];
-    editSections(sections);
-  }
-
-  function addSection() {
-    if (isLocked()) {
-      return;
-    }
-    const sections = queue.getSnapshot().document.sections;
-    if (sections.length >= 100) {
-      return;
-    }
-    const section = { id: crypto.randomUUID(), titleMarkdown: '', contentMarkdown: '' };
-    editSections([...sections, section]);
-    requestAnimationFrame(() =>
-      window.document.getElementById(`edit-${section.id}-title`)?.focus()
-    );
-  }
-
-  function cancelRemoval() {
-    setRemoving(null);
-    requestAnimationFrame(() => removeTrigger.current?.focus());
-  }
-
-  function confirmRemoval() {
-    if (!removing || isLocked()) {
-      return;
-    }
-    const sections = queue.getSnapshot().document.sections;
-    const index = sections.findIndex((section) => section.id === removing.id);
-    const next = sections[index + 1] ?? sections[index - 1];
-    editSections(sections.filter((section) => section.id !== removing.id));
-    setRemoving(null);
-    requestAnimationFrame(() => (next ? toggleRefs.current.get(next.id) : addRef.current)?.focus());
-  }
-
   const statusText =
     snapshot.status === 'saved'
-      ? 'Saved to PostgreSQL'
+      ? 'Saved'
       : snapshot.status === 'saving'
-        ? 'Saving to PostgreSQL…'
+        ? 'Saving…'
         : snapshot.status === 'pending'
-          ? 'Unsaved changes · waiting to save'
+          ? 'Unsaved changes'
           : 'Not saved · your edits are still here';
 
   return (
@@ -981,177 +871,35 @@ function DocumentWorkspace({
         </div>
       )}
       <div className={styles.workspace}>
-        <section className={styles.pane} aria-labelledby="resume-sections-heading" aria-busy={busy}>
+        <section className={styles.pane} aria-labelledby="resume-source-heading" aria-busy={busy}>
           <div className={styles.paneHeading}>
-            <h2 id="resume-sections-heading">Sections</h2>
-            <span className={styles.caption}>
-              {document.sections.length} {document.sections.length === 1 ? 'section' : 'sections'}
-            </span>
+            <h2 id="resume-source-heading">
+              <label htmlFor="resume-markdown">Markdown source</label>
+            </h2>
           </div>
           <fieldset className={styles.fieldset} disabled={busy}>
-            {document.sections.map((section, index) => {
-              const label = sectionLabel(section, index);
-              const expanded = !collapsed.has(section.id);
-              return (
-                <section
-                  className={styles.section}
-                  key={section.id}
-                  aria-labelledby={`section-heading-${section.id}`}
-                >
-                  <div className={styles.sectionHead}>
-                    <h3 id={`section-heading-${section.id}`}>
-                      <button
-                        type="button"
-                        className={styles.sectionToggle}
-                        ref={(node) => {
-                          if (node) {
-                            toggleRefs.current.set(section.id, node);
-                          } else {
-                            toggleRefs.current.delete(section.id);
-                          }
-                        }}
-                        aria-expanded={expanded}
-                        aria-controls={`section-body-${section.id}`}
-                        onClick={() => {
-                          if (!isLocked()) {
-                            setCollapsed((current) => {
-                              const next = new Set(current);
-                              if (next.has(section.id)) {
-                                next.delete(section.id);
-                              } else {
-                                next.add(section.id);
-                              }
-                              return next;
-                            });
-                          }
-                        }}
-                      >
-                        <span>{label}</span>
-                        <span
-                          className={expanded ? styles.expandedChevron : styles.collapsedChevron}
-                        >
-                          <Icon name="chevron" />
-                        </span>
-                      </button>
-                    </h3>
-                    <div className={styles.sectionControls}>
-                      <button
-                        type="button"
-                        className={styles.iconButton}
-                        disabled={index === 0}
-                        aria-label={`Move section ${index + 1}: ${label} up`}
-                        onClick={() => moveSection(index, -1)}
-                      >
-                        <Icon name="up" />
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.iconButton}
-                        disabled={index === document.sections.length - 1}
-                        aria-label={`Move section ${index + 1}: ${label} down`}
-                        onClick={() => moveSection(index, 1)}
-                      >
-                        <Icon name="down" />
-                      </button>
-                    </div>
-                  </div>
-                  <div
-                    id={`section-body-${section.id}`}
-                    className={styles.sectionBody}
-                    hidden={!expanded}
-                  >
-                    <SectionFields
-                      section={section}
-                      prefix="edit"
-                      onChange={(changes) =>
-                        editSections(
-                          queue
-                            .getSnapshot()
-                            .document.sections.map((item) =>
-                              item.id === section.id ? { ...item, ...changes } : item
-                            )
-                        )
-                      }
-                    />
-                    <div className={styles.sectionFoot}>
-                      <span className={styles.caption}>Markdown is saved as written.</span>
-                      <button
-                        type="button"
-                        className={styles.removeButton}
-                        onClick={(event) => {
-                          if (!isLocked()) {
-                            removeTrigger.current = event.currentTarget;
-                            setRemoving(section);
-                          }
-                        }}
-                      >
-                        Remove section
-                      </button>
-                    </div>
-                  </div>
-                </section>
-              );
-            })}
-            {document.sections.length === 0 && (
-              <p className={styles.helper}>No sections yet. Add one to start writing.</p>
-            )}
-            <button
-              ref={addRef}
-              type="button"
-              className={styles.addButton}
-              onClick={addSection}
-              disabled={document.sections.length >= 100}
-            >
-              <Icon name="plus" />
-              Add section
-            </button>
+            <textarea
+              id="resume-markdown"
+              className={`${styles.textarea} ${styles.sourceTextarea}`}
+              value={document.contentMarkdown}
+              rows={24}
+              wrap="soft"
+              spellCheck={false}
+              onChange={(event) => {
+                if (!isLocked()) {
+                  queue.edit({
+                    ...queue.getSnapshot().document,
+                    contentMarkdown: event.currentTarget.value,
+                  });
+                }
+              }}
+            />
           </fieldset>
-          <p className={styles.helper}>
-            Choose your own sections. Leave a title blank for an intro or contact block. Titles can
-            use single-line Markdown.
-          </p>
-          {document.sections.length >= 100 && (
-            <p className={styles.helper}>The maximum is 100 sections per resume.</p>
-          )}
         </section>
         <div className={styles.pane}>
-          <PdfPreview key={document.id} document={document} pending={snapshot.dirty} />
+          <MarkdownPreview key={document.id} document={document} />
         </div>
       </div>
-      <Modal
-        opened={removing !== null}
-        onClose={cancelRemoval}
-        title="Remove section?"
-        classNames={modalClasses}
-        transitionProps={{ duration: 0 }}
-        returnFocus={false}
-        size="28rem"
-        closeButtonProps={{ 'aria-label': 'Cancel removing section' }}
-      >
-        <p className={styles.dialogCopy}>
-          Remove “
-          {removing
-            ? sectionLabel(
-                removing,
-                document.sections.findIndex((section) => section.id === removing.id)
-              )
-            : ''}
-          ” and its content? This cannot be undone.
-        </p>
-        <div className={styles.dialogActions}>
-          <button type="button" className={styles.button} data-autofocus onClick={cancelRemoval}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className={styles.dangerButton}
-            disabled={busy}
-            onClick={confirmRemoval}
-          >
-            Remove section
-          </button>
-        </div>
-      </Modal>
     </>
   );
 }
