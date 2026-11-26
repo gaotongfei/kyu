@@ -2,7 +2,9 @@ import React from 'react';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Document, Page, renderToBuffer, Text } from '@react-pdf/renderer';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { extractText, extractTextItems, getDocumentProxy } from 'unpdf';
+import { MarkdownContent } from '../app/resumes/MarkdownContent';
 import type { Resume } from '../app/resumes/model';
 import { renderResumePdf } from '../app/resumes/pdf';
 import { extractPdfDraft, MAX_PDF_BYTES, MAX_PDF_PAGES } from '../app/resumes/pdf-import';
@@ -501,6 +503,30 @@ test('PDF-imported lines become hard breaks without reinterpreting literal text'
     lines.join('\n')
   );
   assert.equal(draft.markdown.endsWith('  '), false);
+
+  const html = renderToStaticMarkup(h(MarkdownContent, { parsed }));
+  assert.equal(html.match(/<br\s*\/?>/g)?.length, lines.length - 1);
+  assert.equal(html.match(/<p[\s>]/g)?.length, 1);
+  assert.equal(html.includes('<a '), false);
+  const rendered = await renderResumePdf(resume(draft.markdown));
+  assert.equal(await textOf(rendered.buffer), lines.join('\n'));
+  const output = await getDocumentProxy(new Uint8Array(rendered.buffer), { verbosity: 0 });
+  try {
+    const { items } = await extractTextItems(output);
+    const baselines = new Set(
+      items
+        .flat()
+        .filter((item) => item.str.trim())
+        .map((item) => item.y.toFixed(2))
+    );
+    assert.equal(
+      baselines.size,
+      lines.length,
+      'Every extracted line must occupy a separate PDF baseline.'
+    );
+  } finally {
+    await output.loadingTask.destroy();
+  }
 });
 
 test('PDF-imported line breaks leave page separators as paragraphs', async () => {
