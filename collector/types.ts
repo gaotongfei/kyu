@@ -89,6 +89,7 @@ export interface RunReport {
   finishedAt: string | null;
   status: 'running' | 'success' | 'partial' | 'failed' | 'interrupted';
   sources: SourceResult[];
+  removedOutOfScope?: number;
   hirebase: {
     requestedBudget: number;
     reserved: number;

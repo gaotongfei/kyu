@@ -12,6 +12,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "collect:config": "tsx collector/config-cli.ts",
+    "collect": "tsx collector/cli.ts",
     "typecheck": "tsc --noEmit",
     "lint": "npm run oxlint && npm run stylelint",
     "oxlint": "oxlint -c oxlint.config.mjs .",
