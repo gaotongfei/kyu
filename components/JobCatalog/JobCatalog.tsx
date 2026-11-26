@@ -7,6 +7,7 @@ import classes from './JobCatalog.module.css';
 const providerNames: Record<Provider, string> = {
   ashby: 'Ashby',
   greenhouse: 'Greenhouse',
+  lever: 'Lever',
   hirebase: 'Hirebase',
 };
 

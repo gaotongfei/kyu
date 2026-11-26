@@ -31,6 +31,13 @@ const search: SavedSearch = {
   allowUnknownWorkArrangement: false,
 };
 
+function candidates(count: number): Board[] {
+  return Array.from({ length: count }, (_, index) => {
+    const slug = `board-${index}`;
+    return { ...candidate, slug, boardUrl: boardUrl('ashby', slug) };
+  });
+}
+
 function parse(employers: unknown = [candidate], searches: unknown = [search], local?: unknown) {
   return parseConfig(
     JSON.stringify(employers),
@@ -43,7 +50,13 @@ it('builds canonical keys and URLs from validated provider/slug only', () => {
   expect(boardKey(candidate)).toBe('ashby:example');
   expect(boardUrl('ashby', 'Board_1-safe')).toBe('https://jobs.ashbyhq.com/Board_1-safe');
   expect(boardUrl('greenhouse', 'example')).toBe('https://boards.greenhouse.io/example');
+  expect(boardUrl('lever', 'Board_1-safe')).toBe('https://jobs.lever.co/Board_1-safe');
+  expect(boardKey({ provider: 'lever', slug: 'example' })).toBe('lever:example');
   expect(parse().boards).toEqual([candidate]);
+  const lever = { ...candidate, provider: 'lever', boardUrl: 'https://jobs.lever.co/example' };
+  expect(parse([lever], [search], { enabledBoards: ['lever:example'] }).boards).toEqual([
+    { ...lever, enabled: true },
+  ]);
 });
 
 it.each([
@@ -69,11 +82,13 @@ it.each([
   'x'.repeat(81),
 ])('rejects unsafe board slug %p, including in public target helpers', (slug) => {
   expect(() => parse([{ ...candidate, slug }])).toThrow();
-  expect(() => boardUrl('ashby', slug)).toThrow();
-  expect(() => boardKey({ provider: 'ashby', slug })).toThrow();
+  for (const provider of ['ashby', 'greenhouse', 'lever'] as const) {
+    expect(() => boardUrl(provider, slug)).toThrow();
+    expect(() => boardKey({ provider, slug })).toThrow();
+  }
 });
 
-it.each(['lever', 'hirebase', 'Ashby', '', null, 7])(
+it.each(['smartrecruiters', 'lever-eu', 'hirebase', 'Ashby', '', null, 7])(
   'rejects unsupported provider %p',
   (provider) => {
     expect(() => parse([{ ...candidate, provider }])).toThrow('unsupported provider');
@@ -100,6 +115,23 @@ it.each([
   expect(() => parse([{ ...candidate, boardUrl: url }])).toThrow('canonical');
 });
 
+it.each([
+  'https://jobs.eu.lever.co/example',
+  'https://api.lever.co/v0/postings/example',
+  'http://jobs.lever.co/example',
+  'https://jobs.lever.co/example/',
+  'https://jobs.lever.co/with.dot',
+  'https://jobs.lever.co/%65xample',
+  'https://jobs.lever.co:443/example',
+  'https://JOBS.LEVER.CO/example',
+  'https://jobs.lever.co/example?mode=json',
+  'https://jobs.lever.co/example#fragment',
+  'https://jobs.lever.co.evil.test/example',
+  'https://jobs.lever.co@127.0.0.1/example',
+])('rejects noncanonical or nonglobal Lever URL %p', (url) => {
+  expect(() => parse([{ ...candidate, provider: 'lever', boardUrl: url }])).toThrow('canonical');
+});
+
 it('rejects duplicate board keys and search IDs, but scopes board keys by provider', () => {
   expect(() => parse([candidate, { ...candidate, company: 'Other' }])).toThrow('duplicate');
   expect(() => parse([candidate], [search, { ...search, name: 'Other' }])).toThrow('duplicate');
@@ -107,8 +139,9 @@ it('rejects duplicate board keys and search IDs, but scopes board keys by provid
     parse([
       candidate,
       { ...candidate, provider: 'greenhouse', boardUrl: boardUrl('greenhouse', 'example') },
+      { ...candidate, provider: 'lever', boardUrl: boardUrl('lever', 'example') },
     ]).boards
-  ).toHaveLength(2);
+  ).toHaveLength(3);
 });
 
 it('rejects duplicate raw JSON keys, including escaped keys and nested metadata', () => {
@@ -270,10 +303,37 @@ it('allows nullable provenance facts, but rejects missing fields', () => {
   }
 });
 
-it('bounds file size, nesting, record counts and top-level shapes', () => {
-  expect(() => parseConfig(' '.repeat(1024 * 1024 + 1), '[]')).toThrow('1 MiB');
+it('accepts up to 15000 boards and explicit local selections without enabling candidates by default', () => {
+  const employers = candidates(15000);
+  const employersJson = JSON.stringify(employers);
+  expect(Buffer.byteLength(employersJson)).toBeGreaterThan(1024 * 1024);
+  const defaults = parseConfig(employersJson, JSON.stringify([search]));
+  expect(defaults.boards).toHaveLength(15000);
+  expect(defaults.boards.every((board) => !board.enabled)).toBe(true);
+  const config = parseConfig(
+    employersJson,
+    JSON.stringify([search]),
+    JSON.stringify({ enabledBoards: employers.map(boardKey) })
+  );
+  expect(config.boards).toHaveLength(15000);
+  expect(config.boards.every((board) => board.enabled)).toBe(true);
+  expect(config.searches).toEqual([search]);
+  expect(() =>
+    parse(employers, [search], { enabledBoards: Array(15001).fill('ashby:example') })
+  ).toThrow('15000');
+});
+
+it('bounds each parsed JSON file independently', () => {
+  expect(() => parseConfig(' '.repeat(8 * 1024 * 1024 + 1), '[]')).toThrow('8 MiB');
+  expect(() => parseConfig('[]', ' '.repeat(1024 * 1024 + 1))).toThrow('1 MiB');
+  expect(() => parseConfig('[]', '[]', ' '.repeat(1024 * 1024 + 1))).toThrow('1 MiB');
+  // Bounds are UTF-8 bytes, not JavaScript string length.
+  expect(() => parseConfig('[]', `"${'é'.repeat(512 * 1024)}"`)).toThrow('1 MiB');
+});
+
+it('bounds nesting, record counts and top-level shapes', () => {
   expect(() => parseConfig(`${'['.repeat(18)}0${']'.repeat(18)}`, '[]')).toThrow('nesting');
-  expect(() => parse(Array(501).fill(candidate))).toThrow('500');
+  expect(() => parse(Array(15001).fill(candidate))).toThrow('15000');
   expect(() => parse([candidate], Array(51).fill(search))).toThrow('50');
   for (const value of [null, {}, true, 'not an array']) {
     expect(() => parse(value)).toThrow();
@@ -314,20 +374,46 @@ describe('fixture-only file loading', () => {
     expect(() => loadConfig(root)).toThrow();
   });
 
-  it('bounds file size before reading JSON', () => {
-    writeFileSync(join(root, 'collector.local.json'), ' '.repeat(1024 * 1024 + 1));
-    expect(() => loadConfig(root)).toThrow('1 MiB');
+  it('loads an employer file larger than 1 MiB with more than 5000 disabled boards', () => {
+    const employers = candidates(5001);
+    const json = JSON.stringify(employers);
+    expect(Buffer.byteLength(json)).toBeGreaterThan(1024 * 1024);
+    writeFileSync(join(root, 'collector', 'employers.json'), json);
+    const config = loadConfig(root);
+    expect(config.boards).toHaveLength(5001);
+    expect(config.boards.every((board) => !board.enabled)).toBe(true);
+  });
+
+  it.each([
+    ['collector/employers.json', 8],
+    ['collector/searches.json', 1],
+    ['collector.local.json', 1],
+  ] as const)('bounds %s before reading JSON at %i MiB', (path, limit) => {
+    writeFileSync(join(root, path), ' '.repeat(limit * 1024 * 1024 + 1));
+    expect(() => loadConfig(root)).toThrow(`${limit} MiB`);
   });
 });
 
-it('ships exactly the seven pinned disabled records and three disabled illustrative searches', () => {
+it('ships the full compatible pinned directory disabled, preserving the seven original seeds', () => {
   // Read the committed fixtures, not an operator override that might exist on the test host.
   const config = parseConfig(
     readFileSync(join(__dirname, 'employers.json'), 'utf8'),
     readFileSync(join(__dirname, 'searches.json'), 'utf8')
   );
+  expect(config.boards).toHaveLength(9904);
+  expect(new Set(config.boards.map(boardKey)).size).toBe(9904);
   expect(
-    config.boards.map((board) => [boardKey(board), board.company, board.provenance.lastCrawled])
+    Object.fromEntries(
+      (['ashby', 'greenhouse', 'lever'] as const).map((provider) => [
+        provider,
+        config.boards.filter((board) => board.provider === provider).length,
+      ])
+    )
+  ).toEqual({ ashby: 2855, greenhouse: 4966, lever: 2083 });
+  expect(
+    config.boards
+      .slice(0, 7)
+      .map((board) => [boardKey(board), board.company, board.provenance.lastCrawled])
   ).toEqual([
     ['ashby:ashby', 'Ashby', '2026-07-12'],
     ['ashby:linear', 'Linear', '2026-07-17'],
@@ -337,7 +423,10 @@ it('ships exactly the seven pinned disabled records and three disabled illustrat
     ['greenhouse:figma', 'Figma', '2026-07-17'],
     ['greenhouse:stripe', 'Stripe', '2026-07-17'],
   ]);
+  const crawlDates: Record<string, number> = {};
   for (const board of config.boards) {
+    const date = board.provenance.lastCrawled ?? 'missing';
+    crawlDates[date] = (crawlDates[date] ?? 0) + 1;
     expect(board.enabled).toBe(false);
     expect(board.provenance).toMatchObject({
       commit: '2816bfadd65b7bbec23701dd036bcc7496c729db',
@@ -345,6 +434,12 @@ it('ships exactly the seven pinned disabled records and three disabled illustrat
       url: 'https://github.com/fyrosofttech/lastroundai-hiring-data/blob/2816bfadd65b7bbec23701dd036bcc7496c729db/ats-directory/lastroundai-ats-company-directory-2026-08.csv',
     });
   }
+  expect(crawlDates).toEqual({
+    '2026-07-11': 285,
+    '2026-07-12': 640,
+    '2026-07-17': 4999,
+    '2026-08-01': 3980,
+  });
   expect(config.searches.map((entry) => entry.id)).toEqual([
     'software-us-ca',
     'data-us-ca',

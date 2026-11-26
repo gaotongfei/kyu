@@ -4,7 +4,13 @@ export class OperatorError extends Error {}
 
 export type CollectorCommand =
   | { command: 'help' }
-  | { command: 'run'; hirebaseBudget: number; maxBoardJobs: number }
+  | {
+      command: 'run';
+      hirebaseBudget: number;
+      maxBoardJobs: number;
+      boardOffset: number;
+      boardLimit: number;
+    }
   | { command: 'purge'; source: string; sourceJobId: string };
 
 export function parseCollectorArgs(args: string[]): CollectorCommand {
@@ -32,7 +38,7 @@ export function parseCollectorArgs(args: string[]): CollectorCommand {
       throw new OperatorError('Purge requires --source, --job-id and --confirm delete.');
     }
     const source = flags.get('--source')!;
-    if (!/^(hirebase|(?:ashby|greenhouse):[A-Za-z0-9][A-Za-z0-9_-]{0,79})$/.test(source)) {
+    if (!/^(hirebase|(?:ashby|greenhouse|lever):[A-Za-z0-9][A-Za-z0-9_-]{0,79})$/.test(source)) {
       throw new OperatorError('Invalid purge source identity.');
     }
     let sourceJobId: string;
@@ -45,7 +51,10 @@ export function parseCollectorArgs(args: string[]): CollectorCommand {
   }
   if (
     !flags.has('--hirebase-budget') ||
-    [...flags.keys()].some((key) => key !== '--hirebase-budget' && key !== '--max-board-jobs')
+    [...flags.keys()].some(
+      (key) =>
+        !['--hirebase-budget', '--max-board-jobs', '--board-offset', '--board-limit'].includes(key)
+    )
   ) {
     throw new OperatorError(
       'Specify --hirebase-budget 0..500 (or available). Run yarn collect --help.'
@@ -59,5 +68,12 @@ export function parseCollectorArgs(args: string[]): CollectorCommand {
   if (hirebaseBudget < 0 || hirebaseBudget > 500 || maxBoardJobs < 1 || maxBoardJobs > 2000) {
     throw new OperatorError('Budget must be 0..500 and the board-job limit 1..2000.');
   }
-  return { command: 'run', hirebaseBudget, maxBoardJobs };
+  const offsetText = flags.get('--board-offset') ?? '0';
+  const limitText = flags.get('--board-limit') ?? '100';
+  const boardOffset = /^\d{1,5}$/.test(offsetText) ? Number(offsetText) : -1;
+  const boardLimit = /^\d{1,3}$/.test(limitText) ? Number(limitText) : -1;
+  if (boardOffset < 0 || boardOffset >= 15000 || boardLimit < 1 || boardLimit > 500) {
+    throw new OperatorError('Board offset must be 0..14999 and the batch limit 1..500.');
+  }
+  return { command: 'run', hirebaseBudget, maxBoardJobs, boardOffset, boardLimit };
 }

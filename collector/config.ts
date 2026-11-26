@@ -4,7 +4,8 @@ import { normalizeCountry } from './matching';
 import type { Board, BoardProvider, CollectionConfig, SavedSearch, WorkArrangement } from './types';
 
 const MAX_JSON_BYTES = 1024 * 1024;
-const MAX_BOARDS = 500;
+const MAX_EMPLOYERS_JSON_BYTES = 8 * MAX_JSON_BYTES;
+const MAX_BOARDS = 15000;
 const MAX_SEARCHES = 50;
 const MAX_PHRASES = 30;
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/;
@@ -15,7 +16,7 @@ function invalid(path: string, reason: string): never {
 }
 
 function validateBoardIdentity(provider: BoardProvider, slug: string): void {
-  if (provider !== 'ashby' && provider !== 'greenhouse') {
+  if (provider !== 'ashby' && provider !== 'greenhouse' && provider !== 'lever') {
     invalid('board.provider', 'unsupported provider');
   }
   if (typeof slug !== 'string' || !IDENTIFIER.test(slug)) {
@@ -31,14 +32,19 @@ export function boardKey(board: Pick<Board, 'provider' | 'slug'>): string {
 /** The ONLY origin of outbound board targets: never use contributed URLs for requests. */
 export function boardUrl(provider: BoardProvider, slug: string): string {
   validateBoardIdentity(provider, slug);
-  const host = provider === 'ashby' ? 'jobs.ashbyhq.com' : 'boards.greenhouse.io';
+  const hosts: Record<BoardProvider, string> = {
+    ashby: 'jobs.ashbyhq.com',
+    greenhouse: 'boards.greenhouse.io',
+    lever: 'jobs.lever.co',
+  };
+  const host = hosts[provider];
   return `https://${host}/${slug}`;
 }
 
 // Untrusted-input contract: see collector/SPEC.md.
-function parseJson(text: string, label: string): unknown {
-  if (typeof text !== 'string' || Buffer.byteLength(text, 'utf8') > MAX_JSON_BYTES) {
-    invalid(label, 'JSON exceeds the 1 MiB limit');
+function parseJson(text: string, label: string, maxBytes = MAX_JSON_BYTES): unknown {
+  if (typeof text !== 'string' || Buffer.byteLength(text, 'utf8') > maxBytes) {
+    invalid(label, `JSON exceeds the ${maxBytes / MAX_JSON_BYTES} MiB limit`);
   }
   let result: unknown;
   try {
@@ -331,7 +337,7 @@ export function parseConfig(
   localJson?: string
 ): CollectionConfig {
   const config = {
-    boards: boards(parseJson(employersJson, 'employers.json')),
+    boards: boards(parseJson(employersJson, 'employers.json', MAX_EMPLOYERS_JSON_BYTES)),
     searches: searches(parseJson(searchesJson, 'searches.json')),
   };
   if (localJson === undefined) {
@@ -364,16 +370,19 @@ export function parseConfig(
   return config;
 }
 
-function readJsonFile(path: string): string {
-  if (statSync(path).size > MAX_JSON_BYTES) {
-    invalid('file', 'JSON exceeds the 1 MiB limit');
+function readJsonFile(path: string, maxBytes = MAX_JSON_BYTES): string {
+  if (statSync(path).size > maxBytes) {
+    invalid('file', `JSON exceeds the ${maxBytes / MAX_JSON_BYTES} MiB limit`);
   }
   return readFileSync(path, 'utf8');
 }
 
 /** Read collector/{employers,searches}.json and optional project-root collector.local.json. */
 export function loadConfig(projectRoot: string = process.cwd()): CollectionConfig {
-  const employersJson = readJsonFile(join(projectRoot, 'collector', 'employers.json'));
+  const employersJson = readJsonFile(
+    join(projectRoot, 'collector', 'employers.json'),
+    MAX_EMPLOYERS_JSON_BYTES
+  );
   const searchesJson = readJsonFile(join(projectRoot, 'collector', 'searches.json'));
   let localJson: string | undefined;
   try {

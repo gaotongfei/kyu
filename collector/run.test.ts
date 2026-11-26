@@ -16,8 +16,9 @@ const search: SavedSearch = {
   workArrangements: [],
   allowUnknownWorkArrangement: false,
 };
+const candidates = loadConfig();
 function fixtureConfig(): CollectionConfig {
-  const config = loadConfig();
+  const config = candidates;
   return {
     boards: [
       config.boards.find((board) => board.provider === 'ashby')!,
@@ -190,6 +191,132 @@ test('verifies Hirebase Free allowance before search and persists only non-closi
   expect(store.ledger.mock.calls[0][0]).toMatch(/^[a-f0-9]{64}$/);
   expect(JSON.stringify(report)).not.toContain('server-only-key');
 });
+
+test('manual batches are stable across input order, advance offsets, and do not mutate unselected boards', async () => {
+  const config = fixtureConfig();
+  const base = config.boards[0];
+  config.boards = ['d', 'b', 'c', 'a'].map((slug) => ({
+    ...base,
+    slug,
+    boardUrl: `https://jobs.ashbyhq.com/${slug}`,
+  }));
+  config.boards.push({ ...base, slug: 'disabled', enabled: false });
+  const { store } = fixtureStore();
+  const fetcher = jest.fn(async () => new Response(JSON.stringify({ apiVersion: '1', jobs: [] })));
+  const http = new ProviderHttp({ fetch: fetcher });
+  const first = await runCollection(store, config, { hirebaseBudget: 0, boardLimit: 2, http });
+  expect(first.boardBatch).toEqual({
+    totalEnabled: 4,
+    offset: 0,
+    limit: 2,
+    attempted: 2,
+    nextOffset: 2,
+  });
+  expect(store.noteBoard.mock.calls.map(([board]) => board.slug)).toEqual(['a', 'b']);
+  expect(store.persistSource.mock.calls.map(([, options]) => options.source)).toEqual([
+    'ashby:a',
+    'ashby:b',
+  ]);
+  store.noteBoard.mockClear();
+  store.persistSource.mockClear();
+  config.boards.reverse();
+  const second = await runCollection(store, config, {
+    hirebaseBudget: 0,
+    boardOffset: 2,
+    boardLimit: 2,
+    http,
+  });
+  expect(second.boardBatch).toEqual({
+    totalEnabled: 4,
+    offset: 2,
+    limit: 2,
+    attempted: 2,
+    nextOffset: null,
+  });
+  expect(store.noteBoard.mock.calls.map(([board]) => board.slug)).toEqual(['c', 'd']);
+  expect(store.persistSource.mock.calls.map(([, options]) => options.source)).toEqual([
+    'ashby:c',
+    'ashby:d',
+  ]);
+  expect(fetcher).toHaveBeenCalledTimes(4);
+});
+
+test('thousands of enabled boards are bounded to 100 attempts by default, including failures', async () => {
+  const config = fixtureConfig();
+  const base = config.boards[0];
+  config.boards = Array.from({ length: 5000 }, (_, index) => {
+    const slug = `board-${String(index).padStart(5, '0')}`;
+    return { ...base, slug, boardUrl: `https://jobs.ashbyhq.com/${slug}` };
+  }).reverse();
+  const { store } = fixtureStore();
+  const fetcher = jest.fn(async (url) =>
+    String(url).includes('board-00000')
+      ? new Response('{}', { status: 404 })
+      : new Response(JSON.stringify({ apiVersion: '1', jobs: [] }))
+  );
+  const report = await runCollection(store, config, {
+    hirebaseBudget: 0,
+    http: new ProviderHttp({ fetch: fetcher }),
+  });
+  expect(report.status).toBe('partial');
+  expect(report.boardBatch).toEqual({
+    totalEnabled: 5000,
+    offset: 0,
+    limit: 100,
+    attempted: 100,
+    nextOffset: 100,
+  });
+  expect(fetcher).toHaveBeenCalledTimes(100);
+  expect(store.noteBoard).toHaveBeenCalledTimes(100);
+  expect(store.persistSource).toHaveBeenCalledTimes(99);
+  expect(report.sources[0].source).toBe('ashby:board-00000');
+  expect(report.sources[99].source).toBe('ashby:board-00099');
+});
+
+test('no-search runs do not advance a batch and Hirebase-only runs have no next board offset', async () => {
+  const { store } = fixtureStore();
+  const config = fixtureConfig();
+  config.searches = [];
+  const fetcher = jest.fn();
+  const options = { hirebaseBudget: 0, http: new ProviderHttp({ fetch: fetcher }) };
+  expect((await runCollection(store, config, options)).boardBatch).toMatchObject({
+    attempted: 0,
+    nextOffset: 0,
+  });
+  config.boards = [];
+  expect((await runCollection(store, config, options)).boardBatch).toMatchObject({
+    totalEnabled: 0,
+    nextOffset: null,
+  });
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+test.each([
+  { boardOffset: -1 },
+  { boardOffset: 0.5 },
+  { boardOffset: NaN },
+  { boardOffset: 2 },
+  { boardOffset: 15000 },
+  { boardLimit: 0 },
+  { boardLimit: 501 },
+  { boardLimit: Infinity },
+])(
+  'rejects invalid or out-of-selection batch options before side effects: %p',
+  async (batchOptions) => {
+    const { store } = fixtureStore();
+    const fetcher = jest.fn();
+    await expect(
+      runCollection(store, fixtureConfig(), {
+        hirebaseBudget: 0,
+        http: new ProviderHttp({ fetch: fetcher }),
+        ...batchOptions,
+      })
+    ).rejects.toThrow(/batch|offset/);
+    expect(store.acquireLock).not.toHaveBeenCalled();
+    expect(store.prune).not.toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
+  }
+);
 
 test('rejects invalid budgets or overlapping collectors before side effects', async () => {
   const { store } = fixtureStore();

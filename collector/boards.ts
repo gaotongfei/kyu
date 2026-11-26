@@ -1,5 +1,6 @@
 import { boardKey, boardUrl } from './config';
 import { mapBounded, type ProviderHttp } from './http';
+import { collectLeverBoard } from './lever';
 import { normalizeCountry } from './matching';
 import {
   record,
@@ -285,6 +286,10 @@ export async function collectBoard(
     throw new Error('Provider concurrency must be between 1 and 4');
   }
   const limit = Math.min(requestedLimit, MAX_JOBS);
+
+  if (board.provider === 'lever') {
+    return collectLeverBoard(board, source, http, limit);
+  }
 
   if (board.provider === 'ashby') {
     const { data: response } = await http.request(

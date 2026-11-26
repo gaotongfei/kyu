@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { boardKey, boardUrl } from './config';
+import { boardKey, boardUrl, parseConfig } from './config';
 import type { Board, BoardProvider } from './types';
 
 const directoryCommit = '2816bfadd65b7bbec23701dd036bcc7496c729db';
@@ -12,43 +12,65 @@ function csvRows(text: string): string[][] {
   let row: string[] = [];
   let field = '';
   let quoted = false;
+  let closedQuote = false;
   for (let i = 0; i < text.length; i += 1) {
     const char = text[i];
-    if (char === '"') {
-      if (quoted && text[i + 1] === '"') {
-        field += '"';
-        i += 1;
+    if (quoted) {
+      if (char === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i += 1;
+        } else {
+          quoted = false;
+          closedQuote = true;
+        }
       } else {
-        quoted = !quoted;
+        field += char;
       }
-    } else if (!quoted && (char === ',' || char === '\n')) {
-      row.push(field.replace(/\r$/, ''));
+    } else if (char === ',' || char === '\n' || char === '\r') {
+      row.push(field);
       field = '';
-      if (char === '\n') {
+      closedQuote = false;
+      if (char !== ',') {
         rows.push(row);
         row = [];
+        if (char === '\r' && text[i + 1] === '\n') {
+          i += 1;
+        }
       }
+    } else if (char === '"' && !field && !closedQuote) {
+      quoted = true;
     } else {
+      if (char === '"' || closedQuote) {
+        throw new Error('Invalid CSV field');
+      }
       field += char;
     }
   }
   if (quoted) {
     throw new Error('Unterminated CSV field');
   }
-  if (field || row.length) {
-    row.push(field.replace(/\r$/, ''));
+  if (field || row.length || closedQuote) {
+    row.push(field);
     rows.push(row);
   }
   return rows;
 }
 
-export function selectedCandidates(csv: string, selected: string[]): Board[] {
-  if (!selected.length || selected.length > 100 || new Set(selected).size !== selected.length) {
-    throw new Error('Select 1–100 distinct provider:slug keys');
-  }
-  for (const key of selected) {
-    if (!/^(ashby|greenhouse):[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(key)) {
-      throw new Error('Only explicit Ashby/Greenhouse identifiers can be imported');
+function compatibleKey(key: string): boolean {
+  return /^(ashby|greenhouse|lever):[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(key);
+}
+
+export function selectedCandidates(csv: string, selected: string[] | 'all'): Board[] {
+  const selectedKeys = new Set(selected === 'all' ? [] : selected);
+  if (selected !== 'all') {
+    if (!selected.length || selected.length > 15000 || selectedKeys.size !== selected.length) {
+      throw new Error('Select 1–15000 distinct provider:slug keys, or all compatible rows');
+    }
+    for (const key of selected) {
+      if (!compatibleKey(key)) {
+        throw new Error('Only explicit Ashby/Greenhouse/Lever identifiers can be imported');
+      }
     }
   }
   const [headers, ...rows] = csvRows(csv);
@@ -62,10 +84,11 @@ export function selectedCandidates(csv: string, selected: string[]): Board[] {
     }
     const [provider, company, slug, lastCrawled] = fields;
     const key = `${provider}:${slug}`;
-    if (!selected.includes(key)) {
+    // Only bulk import filters incompatible identities; explicit selections fail closed.
+    if (selected === 'all' ? !compatibleKey(key) : !selectedKeys.has(key)) {
       continue;
     }
-    if (found.has(key) || !company.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(lastCrawled)) {
+    if (found.has(key)) {
       throw new Error('Invalid or duplicate selected directory row');
     }
     found.set(key, {
@@ -78,17 +101,20 @@ export function selectedCandidates(csv: string, selected: string[]): Board[] {
         url: `https://github.com/fyrosofttech/lastroundai-hiring-data/blob/${directoryCommit}/${directoryPath}`,
         commit: directoryCommit,
         lastCrawled,
-        license: 'CC-BY-4.0',
+        license: 'CC BY 4.0',
       },
     });
   }
-  if (found.size !== selected.length) {
+  if (selected !== 'all' && found.size !== selected.length) {
     throw new Error('One or more selected identifiers are absent from the pinned directory');
   }
-  return selected.map((key) => found.get(key)!);
+  const candidates =
+    selected === 'all' ? [...found.values()] : selected.map((key) => found.get(key)!);
+  // Share the configuration contract: invalid names/dates are never filtered as incompatibilities.
+  return parseConfig(JSON.stringify(candidates), '[]').boards;
 }
 
-export async function downloadCandidates(selected: string[]): Promise<Board[]> {
+export async function downloadCandidates(selected: string[] | 'all'): Promise<Board[]> {
   const response = await fetch(directoryUrl, {
     redirect: 'error',
     signal: AbortSignal.timeout(15000),

@@ -194,6 +194,7 @@ test('saves report JSON and indexed status/times and bounds or replaces unsafe s
     status: 'partial',
     finishedAt: '2026-11-26T12:05:00Z',
     removedOutOfScope: 2,
+    boardBatch: { totalEnabled: 9904, offset: 100, limit: 100, attempted: 100, nextOffset: 200 },
     sources: [
       {
         source: 'ashby:fixture',
@@ -214,9 +215,24 @@ test('saves report JSON and indexed status/times and bounds or replaces unsafe s
   expect(snapshot.sources[0].message).toHaveLength(500);
   expect(snapshot.finishedAt).toBe(completed.finishedAt);
   expect(snapshot.removedOutOfScope).toBe(2);
+  expect(snapshot.boardBatch).toEqual(completed.boardBatch);
   completed.sources[0].message = 'Provider returned {"description":"raw job","api_key":"key"}';
   await f.store.saveReport(completed);
   expect(JSON.stringify(jsonParams(f.queries[1]))).not.toContain('raw job');
+});
+
+test('accepts scoped Lever identities for persistence and content-free suppression', async () => {
+  const f = fixture();
+  await f.store.persistSource([{ ...job('one', 'lever:fixture'), provider: 'lever' }], {
+    source: 'lever:fixture',
+    complete: false,
+    searches: [search],
+    observedAt,
+  });
+  expect(query(f, /^insert into "collection_jobs"/).params).toContain('lever');
+  await f.store.purge('lever:fixture', 'one');
+  expect(query(f, /^insert into "collection_suppressions"/).params).toContain('lever:fixture');
+  await expect(f.store.purge('lever:../unsafe', 'one')).rejects.toThrow('Invalid collector source');
 });
 
 test('prunes all stored jobs against enabled searches; retained rows change only match IDs', async () => {

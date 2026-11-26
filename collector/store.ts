@@ -42,7 +42,7 @@ function sourceProvider(source: string): CollectedJob['provider'] {
   if (source === 'hirebase') {
     return 'hirebase';
   }
-  const match = /^(ashby|greenhouse):([A-Za-z0-9][A-Za-z0-9_-]{0,79})$/.exec(source);
+  const match = /^(ashby|greenhouse|lever):([A-Za-z0-9][A-Za-z0-9_-]{0,79})$/.exec(source);
   requireValue(match !== null, 'Invalid collector source');
   const provider = match[1] as Board['provider'];
   requireValue(boardKey({ provider, slug: match[2] }) === source, 'Invalid collector source');
@@ -119,6 +119,17 @@ function reportSnapshot(report: RunReport): RunReport {
     ...(report.removedOutOfScope === undefined
       ? {}
       : { removedOutOfScope: report.removedOutOfScope }),
+    ...(report.boardBatch === undefined
+      ? {}
+      : {
+          boardBatch: {
+            totalEnabled: report.boardBatch.totalEnabled,
+            offset: report.boardBatch.offset,
+            limit: report.boardBatch.limit,
+            attempted: report.boardBatch.attempted,
+            nextOffset: report.boardBatch.nextOffset,
+          },
+        }),
     sources: report.sources.map((source) => ({
       source: source.source,
       provider: source.provider,

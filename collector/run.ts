@@ -21,6 +21,8 @@ export async function runCollection(
     http?: ProviderHttp;
     now?: () => Date;
     maxBoardJobs?: number;
+    boardOffset?: number;
+    boardLimit?: number;
   }
 ): Promise<RunReport> {
   if (
@@ -30,6 +32,29 @@ export async function runCollection(
   ) {
     throw new Error('Hirebase invocation budget must be between 0 and 500');
   }
+  const boardOffset = options.boardOffset ?? 0;
+  const boardLimit = options.boardLimit ?? 100;
+  if (
+    !Number.isSafeInteger(boardOffset) ||
+    boardOffset < 0 ||
+    boardOffset >= 15000 ||
+    !Number.isSafeInteger(boardLimit) ||
+    boardLimit < 1 ||
+    boardLimit > 500
+  ) {
+    throw new Error('Invalid board batch: offset must be 0..14999 and limit 1..500');
+  }
+  const enabledBoards = config.boards
+    .filter((board) => board.enabled)
+    .sort((left, right) => {
+      const a = boardKey(left);
+      const b = boardKey(right);
+      return a < b ? -1 : a > b ? 1 : 0;
+    });
+  if (boardOffset > 0 && boardOffset >= enabledBoards.length) {
+    throw new Error('Board offset is outside the enabled board selection');
+  }
+  const batch = enabledBoards.slice(boardOffset, boardOffset + boardLimit);
   const now = options.now ?? (() => new Date());
   const http = (options.http ?? new ProviderHttp()).guarded(() => store.assertLock());
   const report: RunReport = {
@@ -38,6 +63,13 @@ export async function runCollection(
     finishedAt: null,
     status: 'running',
     sources: [],
+    boardBatch: {
+      totalEnabled: enabledBoards.length,
+      offset: boardOffset,
+      limit: boardLimit,
+      attempted: 0,
+      nextOffset: enabledBoards.length ? boardOffset : null,
+    },
     hirebase: {
       requestedBudget: options.hirebaseBudget,
       reserved: 0,
@@ -68,7 +100,7 @@ export async function runCollection(
       });
       report.status = 'failed';
     } else {
-      for (const board of config.boards.filter((entry) => entry.enabled)) {
+      for (const board of batch) {
         const source = boardKey(board);
         let outcome: SourceResult;
         try {
@@ -116,6 +148,9 @@ export async function runCollection(
           );
         }
         report.sources.push(outcome);
+        report.boardBatch!.attempted += 1;
+        const nextOffset = boardOffset + report.boardBatch!.attempted;
+        report.boardBatch!.nextOffset = nextOffset < enabledBoards.length ? nextOffset : null;
         await store.saveReport(report);
       }
       if (options.hirebaseBudget === 0 || !options.hirebaseKey) {

@@ -238,6 +238,29 @@ test('repeat ingestion preserves identity, first observed and separate cross-sou
   assert.equal(stored[0].title, 'Fixture Senior Software Engineer');
 });
 
+test('Lever preserves original and application links through catalog reads, lifecycle and purge', async () => {
+  const source = 'lever:fixture';
+  const posting = job(source, 'one', {
+    provider: 'lever',
+    jobUrl: 'https://jobs.lever.co/fixture/one',
+    applicationUrl: 'https://jobs.lever.co/fixture/one/apply',
+  });
+  await store.persistSource([posting], scope(source, true));
+  const catalog = await queryCatalog(connection.db, catalogFilters({}));
+  assert.equal(catalog.jobs[0].job.jobUrl, posting.jobUrl);
+  assert.equal(catalog.jobs[0].job.applicationUrl, posting.applicationUrl);
+  await store.persistSource([], scope(source, false, 25));
+  assert.equal((await rows())[0].active, true);
+  await store.persistSource([], scope(source, true, 25));
+  assert.equal((await rows())[0].active, false);
+  await store.persistSource([posting], scope(source, true, 26));
+  assert.equal((await rows())[0].firstObservedAt.toISOString(), at(24).toISOString());
+  assert.equal((await rows())[0].active, true);
+  await store.purge(source, 'one');
+  await store.persistSource([posting], scope(source, true, 26));
+  assert.equal((await rows()).length, 0);
+});
+
 test('only matches persist, retaining all reported locations and unknown facts', async () => {
   await store.persistSource(
     [
@@ -376,6 +399,35 @@ test('a failing source leaves earlier rows untouched while another source commit
   assert.equal(previous.lastObservedAt.toISOString(), at(24).toISOString());
   assert.equal(previous.active, true);
   assert.equal((await connection.db.select().from(collectionRuns))[0].status, 'partial');
+});
+
+test('batched runs persist progress and do not refresh or close boards outside the batch', async () => {
+  await store.persistSource([job('greenhouse:figma', 'untouched')], scope('greenhouse:figma'));
+  const result = await runCollection(store, config, {
+    hirebaseBudget: 0,
+    boardLimit: 1,
+    http: new ProviderHttp({
+      fetch: async () => new Response(JSON.stringify({ apiVersion: '1', jobs: [] })),
+    }),
+  });
+  assert.deepEqual(result.boardBatch, {
+    totalEnabled: 2,
+    offset: 0,
+    limit: 1,
+    attempted: 1,
+    nextOffset: 1,
+  });
+  const [savedRun] = await connection.db.select().from(collectionRuns);
+  assert.deepEqual(savedRun.report.boardBatch, result.boardBatch);
+  const [untouched] = await rows();
+  assert.equal(untouched.source, 'greenhouse:figma');
+  assert.equal(untouched.active, true);
+  assert.equal(untouched.lastObservedAt.toISOString(), at(24).toISOString());
+  const boards = await connection.db.select().from(collectionBoards);
+  assert.deepEqual(
+    boards.map((board) => board.source),
+    ['ashby:ashby']
+  );
 });
 
 test('advisory lock rejects a separate connection and releases for the next invocation', async () => {

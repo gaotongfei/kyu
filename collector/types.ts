@@ -1,4 +1,4 @@
-export type BoardProvider = 'ashby' | 'greenhouse';
+export type BoardProvider = 'ashby' | 'greenhouse' | 'lever';
 export type Provider = BoardProvider | 'hirebase';
 export type WorkArrangement = 'remote' | 'hybrid' | 'onsite';
 
@@ -90,6 +90,13 @@ export interface RunReport {
   status: 'running' | 'success' | 'partial' | 'failed' | 'interrupted';
   sources: SourceResult[];
   removedOutOfScope?: number;
+  boardBatch?: {
+    totalEnabled: number;
+    offset: number;
+    limit: number;
+    attempted: number;
+    nextOffset: number | null;
+  };
   hirebase: {
     requestedBudget: number;
     reserved: number;

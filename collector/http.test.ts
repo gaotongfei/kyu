@@ -25,6 +25,36 @@ test('rejects arbitrary hosts, credentials, ports and redirects', async () => {
   );
 });
 
+test('allows only the global Lever API origin, preserving HTTPS and redirect protections', async () => {
+  const fetcher = jest.fn().mockImplementation(async () => reply([]));
+  const http = new ProviderHttp({ fetch: fetcher, retries: 0 });
+  const lever = 'https://api.lever.co/v0/postings/acme?mode=json&skip=0&limit=100';
+  await expect(http.request(lever)).resolves.toMatchObject({ data: [] });
+  expect(fetcher).toHaveBeenCalledWith(
+    lever,
+    expect.objectContaining({ method: 'GET', redirect: 'error', cache: 'no-store' })
+  );
+  for (const target of [
+    'http://api.lever.co/v0/postings/acme',
+    'https://api.eu.lever.co/v0/postings/acme',
+    'https://api.lever.co.eu/v0/postings/acme',
+    'https://jobs.lever.co/acme',
+    'https://api.lever.co.evil.test/v0/postings/acme',
+    'https://evil.api.lever.co/v0/postings/acme',
+    'https://api.lever.co:444/v0/postings/acme',
+    'https://user:secret@api.lever.co/v0/postings/acme',
+    'https://api.lever.co@evil.test/v0/postings/acme',
+    'https://api.lever.co/v0/postings/acme#fragment',
+  ]) {
+    await expect(http.request(target)).rejects.toThrow('allowlisted');
+  }
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  fetcher.mockResolvedValue(
+    reply({}, 302, { location: 'https://api.eu.lever.co/v0/postings/acme' })
+  );
+  await expect(http.request(lever)).rejects.toThrow('302');
+});
+
 test('retries safe requests and rate limits, respecting bounded Retry-After', async () => {
   const fetcher = jest
     .fn()

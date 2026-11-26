@@ -281,6 +281,30 @@ describe('JobCatalog', () => {
     expect(details).not.toHaveTextContent('USD');
   });
 
+  it('shows Lever provenance with separate original posting and application links', () => {
+    const entry = fixtureJob();
+    entry.job = {
+      ...entry.job,
+      provider: 'lever',
+      source: 'lever:fixture-board',
+      jobUrl: 'https://jobs.lever.co/fixture-board/fixture-job-1',
+      applicationUrl: 'https://jobs.lever.co/fixture-board/fixture-job-1/apply',
+    };
+    const { container } = render(<JobCatalog result={fixtureCatalog({ jobs: [entry] })} />);
+    expect(disclosure(container)).not.toHaveTextContent('Lever');
+    const details = openDetails(container);
+    expect(within(details).getByText('Lever')).toBeVisible();
+    expect(within(details).getByText('lever:fixture-board')).toBeVisible();
+    expect(within(details).getByRole('link', { name: 'Original listing' })).toHaveAttribute(
+      'href',
+      entry.job.jobUrl
+    );
+    expect(within(details).getByRole('link', { name: 'Open application' })).toHaveAttribute(
+      'href',
+      entry.job.applicationUrl
+    );
+  });
+
   it('renders untrusted descriptions as plain text, never injected HTML or script', () => {
     const entry = fixtureJob();
     entry.job.descriptionText =

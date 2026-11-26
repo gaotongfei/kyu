@@ -6,9 +6,12 @@ Run migrations and configure the ignored project-root `collector.local.json` bef
 
 ```sh
 test -f collector.local.json || cp collector.local.example.json collector.local.json
-# Choose explicit enabledBoards and searches; defaults are disabled.
+# Configure an enabled saved search locally; defaults are disabled.
+yarn collect:config enable ashby:ashby lever:spotify  # explicit board selection
+# Or opt in to every bundled candidate:
+yarn collect:config enable --all
 yarn collect:config validate
-yarn collect --hirebase-budget 0           # enabled boards only
+yarn collect --hirebase-budget 0           # first 100 enabled boards
 yarn collect --hirebase-budget 2           # small Hirebase result allocation
 yarn collect --hirebase-budget available   # explicitly use remaining Free capacity
 ```
@@ -18,6 +21,20 @@ For Hirebase, add `HIREBASE_API_KEY` only to this workspace's server environment
 Free currently allows **500 returned records/month**, resetting on the first UTC day. Duplicates, nonmatches and repeat observations consume capacity. Provider remaining allowance, the invocation cap and persistent local accounting all apply. Ambiguous spending remains reserved and is not blindly retried. `available` can exhaust the month's allowance.
 
 The local `searches` list replaces the bundled list. Unknown required facts are excluded unless opted in; remote is not country/work-authorization evidence. Search edits prune nonmatching content on the next invocation: **disabling every search clears the catalog**. Previously excluded jobs require a refetch to be included.
+
+## Batches across thousands of boards
+
+The bundled directory contains 9,904 disabled candidates across Ashby, Greenhouse and global Lever. Historical entries can be empty, moved or unavailable; only collection validates current endpoints. No live directory-wide scan runs on import, enable, application startup or page reads.
+
+Each invocation attempts at most 100 enabled boards by default. `--board-limit` accepts 1–500; `--board-offset` is zero-based within the enabled selection sorted by `provider:slug`, independent of registry order. The JSON report's `boardBatch` records `totalEnabled`, `offset`, `limit`, `attempted` and `nextOffset`; null means the selected board range is finished, not that every board succeeded. Run status describes the attempted batch, not the entire directory.
+
+```sh
+yarn collect --hirebase-budget 0 --board-offset 0 --board-limit 100
+# If boardBatch.nextOffset is 100:
+yarn collect --hirebase-budget 0 --board-offset 100 --board-limit 100
+```
+
+Keep board selections stable between offsets; changing enabled keys can shift the ranges. There is no implicit cursor or automatic continuation. Rerun the same offset to retry failures or interrupted work; stable upserts make repeated observations safe. A completed invocation advances past failed boards too, so inspect source outcomes before continuing. Boards outside the batch are neither refreshed nor closed, though normal search-driven pruning still applies to the whole catalog. Disabled searches do not advance board progress. Use a zero Hirebase budget for board-only batches; a nonzero budget is a separate explicit allocation on **each invocation**.
 
 ## Reports, partial results and deletion
 
@@ -31,13 +48,13 @@ yarn collect --hirebase-budget 0 --max-board-jobs 5
 # Delete source content and suppress re-ingestion of that identity:
 yarn collect purge --source hirebase --job-id PROVIDER_JOB_ID --confirm delete
 # Import only selected identifiers from the pinned directory; no board probing/activation:
-yarn collect:config import ashby:SELECTED_SLUG greenhouse:SELECTED_SLUG
+yarn collect:config import ashby:SELECTED_SLUG greenhouse:SELECTED_SLUG lever:SELECTED_SLUG
 ```
 
-Purge uses the exact source/ID shown in job details (`hirebase`, `ashby:BOARD`, `greenhouse:BOARD`). Follow source deletion notices and terms. Directory/API access is not blanket permission to redistribute job content. Global Hirebase expiration-feed synchronization is not implemented; its 14-day feed cannot recover arbitrary stale history. Candidate contributions remain disabled and require validation plus maintainer review. Lever and arbitrary URL crawling are unsupported.
+Purge uses the exact source/ID shown in job details (`hirebase`, `ashby:BOARD`, `greenhouse:BOARD`, `lever:BOARD`). Follow source deletion notices and terms. Directory/API access is not blanket permission to redistribute job content. Global Hirebase expiration-feed synchronization is not implemented; its 14-day feed cannot recover arbitrary stale history. Candidate contributions remain disabled and require validation plus maintainer review. EU Lever, SmartRecruiters and arbitrary URL crawling are unsupported.
 
 ## Verification boundaries
 
 `yarn test:collection:postgres` creates a uniquely labeled PostgreSQL 18 container on a random loopback port with temporary storage. It checks ownership before cleanup and never drops an existing database/volume; `postgres:18-alpine` is pulled if absent. All automated provider responses are fixtures, regardless of environment keys.
 
-Initial live compatibility checks used only one Ashby list, one Greenhouse list and one Greenhouse pay detail, without application-database persistence. **Hirebase remains fixture-verified: no live key/request was used.** Official docs were reviewed, but direct access to its application terms page was blocked; verify current plan/source terms before use. No deployment, publishing or provider subscription is part of collection.
+Live compatibility checks used one Ashby list, one Greenhouse list, one Greenhouse pay detail and one Lever demo request limited to a single posting, without application-database persistence. Lever pagination, malformed responses and lifecycle behavior are fixture/integration-tested, not a live directory-wide certification. Original posting and separate application URLs are retained when supplied and appear in the catalog's expanded job details. **Hirebase remains fixture-verified: no live key/request was used.** Official docs were reviewed, but direct access to its application terms page was blocked; verify current plan/source terms before use. No deployment, publishing or provider subscription is part of collection.

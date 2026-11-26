@@ -62,7 +62,12 @@ export class ProviderHttp {
 
   async request(url: string, init: RequestInit = {}): Promise<HttpReply> {
     const target = new URL(url);
-    const allowed = ['api.hirebase.org', 'api.ashbyhq.com', 'boards-api.greenhouse.io'];
+    const allowed = [
+      'api.hirebase.org',
+      'api.ashbyhq.com',
+      'boards-api.greenhouse.io',
+      'api.lever.co',
+    ];
     if (
       target.protocol !== 'https:' ||
       !allowed.includes(target.hostname) ||

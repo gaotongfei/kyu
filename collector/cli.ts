@@ -9,13 +9,16 @@ async function main(): Promise<void> {
   const command = parseCollectorArgs(process.argv.slice(2));
   if (command.command === 'help') {
     process.stdout.write(`On-demand job collection (never runs on page load):
-  yarn collect --hirebase-budget 0               # enabled boards only
+  yarn collect --hirebase-budget 0               # first 100 enabled boards
+  yarn collect --hirebase-budget 0 --board-offset 100 --board-limit 100  # next batch
   yarn collect --hirebase-budget 2               # at most 2 Hirebase results
   yarn collect --hirebase-budget available       # explicitly use remaining Free allowance
   yarn collect --hirebase-budget 0 --max-board-jobs 5  # incomplete QA sample; cannot close missing jobs
   yarn collect purge --source ashby:example --job-id ID --confirm delete
 
 Configure collector.local.json, DATABASE_URL and optionally HIREBASE_API_KEY locally.
+Batches use sorted provider:slug keys. Keep selections stable between offsets; reports include nextOffset.
+--board-limit is 1..500 (default 100); --board-offset is zero-based (default 0).
 Purge deletes one source record and suppresses its future ingestion. No provider request is made.
 `);
     return;
@@ -53,6 +56,8 @@ Purge deletes one source record and suppresses its future ingestion. No provider
       const report = await runCollection(store, config!, {
         hirebaseBudget: command.hirebaseBudget,
         maxBoardJobs: command.maxBoardJobs,
+        boardOffset: command.boardOffset,
+        boardLimit: command.boardLimit,
         hirebaseKey: process.env.HIREBASE_API_KEY,
       });
       process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);

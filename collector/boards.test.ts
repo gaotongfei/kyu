@@ -749,7 +749,7 @@ describe('board safety and bounded collection', () => {
   );
 
   it.each([
-    { provider: 'lever' },
+    { provider: 'unsupported-ats' },
     { slug: '../evil' },
     { slug: 'acme/extra' },
     { slug: 'acme?redirect=evil' },

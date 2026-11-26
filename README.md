@@ -31,13 +31,17 @@ Imports are reviewed and editable before creating a new resume, never replacemen
 
 ## Job collection
 
-The `/jobs` catalog reads PostgreSQL only. Browser reads, startup, builds and automated tests never contact job providers. Hirebase, Ashby and Greenhouse are supported; all bundled board/search examples remain disabled until explicitly selected.
+The `/jobs` catalog reads PostgreSQL only. Browser reads, startup, builds and automated tests never contact job providers. Hirebase, Ashby, Greenhouse and global Lever are supported. The bundled directory includes 9,904 board candidates; all boards and example searches remain disabled until explicitly selected. Job details expose original posting links separately from application links when supplied by the source.
 
 ```sh
 test -f collector.local.json || cp collector.local.example.json collector.local.json
-# Edit enabledBoards and searches before collection.
+# Configure an enabled saved search before collection.
+yarn collect:config enable ashby:ashby lever:spotify
+# Or explicitly select all candidates: yarn collect:config enable --all
 yarn collect:config validate
-yarn collect --hirebase-budget 0           # enabled boards only
+yarn collect --hirebase-budget 0           # first 100 enabled boards
+# Continue at the report's boardBatch.nextOffset; keep selections stable:
+yarn collect --hirebase-budget 0 --board-offset 100 --board-limit 100
 yarn collect --hirebase-budget 2           # at most two returned Hirebase records
 ```
 
