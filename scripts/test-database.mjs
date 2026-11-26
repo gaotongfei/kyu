@@ -10,7 +10,7 @@ try {
   if (!/^[a-f\d]{64}$/.test(container)) throw new Error('Docker did not return a test container ID.');
   const deadline = Date.now() + 60_000;
   while (true) {
-    try { run('docker', ['exec', container, 'pg_isready', '-U', 'kyu', '-d', 'kyu_resume_test'], { stdio: 'ignore' }); break; }
+    try { run('docker', ['exec', container, 'pg_isready', '-h', '127.0.0.1', '-U', 'kyu', '-d', 'kyu_resume_test'], { stdio: 'ignore' }); break; }
     catch { if (Date.now() > deadline) throw new Error('Isolated PostgreSQL did not become ready.'); await setTimeout(250); }
   }
   const address = run('docker', ['port', container, '5432/tcp']).trim();

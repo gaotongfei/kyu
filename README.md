@@ -40,4 +40,6 @@ yarn build
 KYU_BASE_URL=http://127.0.0.1:3017 yarn test:e2e
 ```
 
+Builds and unit/document tests require neither `DATABASE_URL` nor a running database. Runtime storage operations still require a configured `DATABASE_URL`. CI explicitly builds without database configuration, runs the regular tests and then runs `test:db`.
+
 `test:db` requires Docker and creates/removes only its own ephemeral PostgreSQL container, applying the migration twice to verify safe reapplication. Browser tests require an app server and a separate test database; they create and modify sample resumes. Keep user-owned databases and environment files out of verification.
