@@ -60,6 +60,7 @@ export interface CollectedJob {
   descriptionHtml: string | null;
   descriptionText: string | null;
   descriptionComplete: boolean;
+  detailsComplete?: boolean;
   locations: ReportedLocation[];
   workArrangement: WorkArrangement | null;
   reportedWorkArrangement: string | null;
