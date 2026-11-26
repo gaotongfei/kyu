@@ -2,9 +2,7 @@ import React from 'react';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Document, Page, renderToBuffer, Text } from '@react-pdf/renderer';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { extractText, extractTextItems, getDocumentProxy } from 'unpdf';
-import { MarkdownContent } from '../app/resumes/MarkdownContent';
 import type { Resume } from '../app/resumes/model';
 import { renderResumePdf } from '../app/resumes/pdf';
 import { extractPdfDraft, MAX_PDF_BYTES, MAX_PDF_PAGES } from '../app/resumes/pdf-import';
@@ -495,8 +493,12 @@ test('PDF-imported lines become hard breaks without reinterpreting literal text'
   assert.equal(
     paragraph.children
       .map((node) => {
-        if (node.type === 'break') return '\n';
-        if (node.type === 'text') return node.text;
+        if (node.type === 'break') {
+          return '\n';
+        }
+        if (node.type === 'text') {
+          return node.text;
+        }
         return assert.fail('Imported PDF text must not gain formatting or links.');
       })
       .join(''),
@@ -504,10 +506,6 @@ test('PDF-imported lines become hard breaks without reinterpreting literal text'
   );
   assert.equal(draft.markdown.endsWith('  '), false);
 
-  const html = renderToStaticMarkup(h(MarkdownContent, { parsed }));
-  assert.equal(html.match(/<br\s*\/?>/g)?.length, lines.length - 1);
-  assert.equal(html.match(/<p[\s>]/g)?.length, 1);
-  assert.equal(html.includes('<a '), false);
   const rendered = await renderResumePdf(resume(draft.markdown));
   assert.equal(await textOf(rendered.buffer), lines.join('\n'));
   const output = await getDocumentProxy(new Uint8Array(rendered.buffer), { verbosity: 0 });

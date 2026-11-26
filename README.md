@@ -29,7 +29,7 @@ The live HTML preview updates locally, including unsaved edits. Markdown downloa
 Imports are reviewed and editable before creating a new resume, never replacements for the current document:
 
 - **Markdown:** strict UTF-8, up to 500,000 UTF-16 units, including empty documents. Unedited imports preserve whitespace, BOM and CRLF through export. Editing uses normal browser textarea behavior.
-- **PDF:** up to 10 MiB and 20 pages, with selectable text. Extraction is local and produces a Markdown draft; no OCR, layout recovery or original-file retention.
+- **PDF:** up to 10 MiB and 20 pages, with selectable text. Extraction is local and produces a Markdown draft with explicit line breaks for preview and PDF export; no OCR, layout recovery or original-file retention. Existing imported documents are not rewritten—reimport the PDF or add Markdown hard breaks to keep their lines separate.
 
 ## Checks
 

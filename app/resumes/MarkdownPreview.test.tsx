@@ -127,6 +127,32 @@ it('renders shared headings, ordered lists, quotes, code and hard breaks as sema
   expect(container.querySelector('br')).not.toBeNull();
 });
 
+it('keeps escaped PDF draft lines separate without changing ordinary soft newlines', () => {
+  const contentMarkdown = [
+    'Alex Morgan',
+    String.raw`Full\-Stack Engineer`,
+    String.raw`Github\: https\://example\.invalid/profile`,
+    'EXPERIENCE',
+  ].join('  \n');
+  const { rerender } = render(<MarkdownPreview document={{ ...document, contentMarkdown }} />);
+  const article = screen.getByRole('article');
+  expect(article.querySelectorAll('br')).toHaveLength(3);
+  expect(article.querySelectorAll('p')).toHaveLength(1);
+  expect(article.querySelectorAll('a, h1, h2, ul, ol')).toHaveLength(0);
+  const displayedLines = Array.from(article.querySelector('p')!.childNodes, (node) =>
+    node.nodeName === 'BR' ? '\n' : node.textContent
+  ).join('');
+  expect(displayedLines).toBe(
+    'Alex Morgan\nFull-Stack Engineer\nGithub: https://example.invalid/profile\nEXPERIENCE'
+  );
+
+  rerender(
+    <MarkdownPreview document={{ ...document, contentMarkdown: 'A soft\nline stays soft.' }} />
+  );
+  expect(screen.getByRole('article').querySelector('br')).toBeNull();
+  expect(screen.getByRole('article')).toHaveTextContent('A soft line stays soft.');
+});
+
 it('shares forward references, prototype-safe definitions, and literal task-list numbering', () => {
   const contentMarkdown = [
     '# [Profile][constructor]',
