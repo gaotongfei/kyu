@@ -124,7 +124,7 @@ function fixtureReport(): RunReport {
 }
 
 function disclosure(container: HTMLElement): HTMLElement {
-  return container.querySelector('section[aria-labelledby="catalog-heading"] summary')!;
+  return container.querySelector('section[aria-labelledby="catalog-heading"] > details > summary')!;
 }
 
 function openDetails(container: HTMLElement): HTMLElement {
@@ -179,9 +179,7 @@ describe('JobCatalog', () => {
     expect(screen.queryByText(/Opening or filtering this page/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Roles collected from the searches/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Private, read-only catalog\./)).not.toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: '1 matching job · Active listings' })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '1 job' })).toBeInTheDocument();
     expect(container.querySelectorAll('details')).toHaveLength(1);
     expect(screen.getAllByRole('button')).toHaveLength(1);
   });
@@ -215,21 +213,36 @@ describe('JobCatalog', () => {
     );
   });
 
-  it('keeps essential metadata in the native summary and application/original anchors independent', () => {
+  it('shows only title, salary and location in the native summary and reveals all other facts on click', () => {
     const { container } = render(<JobCatalog result={fixtureCatalog()} />);
     const summary = disclosure(container);
-    expect(summary).toHaveTextContent('Fixture engineer');
-    expect(summary).toHaveTextContent('Fixture employer');
-    expect(summary).toHaveTextContent('Toronto, Canada · New York, US');
     expect(summary).toHaveTextContent(
-      'Work arrangement: remote · Source wording: Remote in Canada or the US'
+      /^Fixture engineerCAD 150k–190k \/ yearToronto, Canada · New York, US$/
     );
-    expect(summary).toHaveTextContent('Base salary: CAD 150,000–190,000 · year');
-    expect(summary).toHaveTextContent('Full time');
-    expect(summary).toHaveTextContent('Ashby · ashby:fixture-board · Last observed');
-    expect(summary).toHaveTextContent('Active');
+    for (const text of [
+      'Fixture employer',
+      'Work arrangement',
+      'Remote in Canada or the US',
+      'Full time',
+      'Ashby',
+      'ashby:fixture-board',
+      'Last observed',
+      'Active',
+      'Show / hide',
+    ]) {
+      expect(summary).not.toHaveTextContent(text);
+    }
     expect(summary.querySelector('a, button, input')).toBeNull();
+    expect(screen.getByText('Open application')).not.toBeVisible();
+    expect(screen.getByText('Fixture employer')).not.toBeVisible();
     const details = openDetails(container);
+    expect(screen.getByText('Fixture employer')).toBeVisible();
+    expect(details).toHaveTextContent('Full time');
+    expect(details).toHaveTextContent('Active');
+    expect(details).toHaveTextContent('Remote in Canada or the US');
+    expect(details).toHaveTextContent('Ashby');
+    expect(details).toHaveTextContent('ashby:fixture-board');
+    expect(details).toHaveTextContent('Base salary: CAD 150,000–190,000 · year');
     expect(within(details).getByRole('link', { name: 'Open application' })).toHaveAttribute(
       'href',
       'https://example.test/apply/fixture-job-1'
@@ -250,6 +263,22 @@ describe('JobCatalog', () => {
     expect(screen.getByText(/Region: Ontario · Country: Canada/)).toBeInTheDocument();
     fireEvent.click(summary);
     expect(details).not.toHaveAttribute('open');
+  });
+
+  it.each([
+    [149500, 190250, 'CAD 149.5k–190.25k / year'],
+    [0, 0, 'CAD 0 / year'],
+    [150000, null, 'CAD From 150k / year'],
+    [null, 190000, 'CAD Up to 190k / year'],
+    [null, null, 'CAD Amount not reported / year'],
+  ] as const)('keeps compact pay exact for bounds %s–%s', (min, max, expected) => {
+    const entry = fixtureJob();
+    entry.job.compensation[0] = { ...entry.job.compensation[0], min, max };
+    const { container } = render(<JobCatalog result={fixtureCatalog({ jobs: [entry] })} />);
+    expect(disclosure(container)).toHaveTextContent(expected);
+    const details = openDetails(container);
+    expect(details).toHaveTextContent('Compensation');
+    expect(details).not.toHaveTextContent('USD');
   });
 
   it('renders untrusted descriptions as plain text, never injected HTML or script', () => {
@@ -285,13 +314,17 @@ describe('JobCatalog', () => {
     entry.lastBoardSuccessAt = null;
     const { container } = render(<JobCatalog result={fixtureCatalog({ jobs: [entry] })} />);
     const summary = disclosure(container);
-    expect(summary).toHaveTextContent('Reported location: Not specified');
-    expect(summary).toHaveTextContent(
-      'Work arrangement: Not specified · Source wording: Not specified'
-    );
-    expect(summary).toHaveTextContent('Employment type not specified');
+    expect(summary).toHaveTextContent('Location not specified');
     expect(summary).toHaveTextContent('Salary not listed');
-    openDetails(container);
+    expect(summary).not.toHaveTextContent('Work arrangement');
+    const details = openDetails(container);
+    expect(details).toHaveTextContent('Employment type not specified');
+    expect(screen.getByText('Work arrangement').nextElementSibling).toHaveTextContent(
+      'Not specified'
+    );
+    expect(screen.getByText('Source work arrangement').nextElementSibling).toHaveTextContent(
+      'Not specified'
+    );
     expect(screen.getByText('Description not reported.')).toBeInTheDocument();
     expect(screen.getByText('Description may be incomplete.')).toBeInTheDocument();
     expect(screen.getByText('Source posted').nextElementSibling).toHaveTextContent('Not reported');
@@ -320,18 +353,24 @@ describe('JobCatalog', () => {
     ];
     const { container } = render(<JobCatalog result={fixtureCatalog({ jobs: [entry] })} />);
     const summary = disclosure(container);
-    expect(summary).toHaveTextContent('Greenhouse');
-    expect(summary).toHaveTextContent('Base salary: USD 100,000–120,000 · period not reported');
+    expect(summary).not.toHaveTextContent('Greenhouse');
+    expect(summary).toHaveTextContent('USD 100k–120k · period not reported');
     expect(summary).toHaveTextContent('Equity: Currency not reported 10–20 · period not reported');
-    expect(summary).toHaveTextContent('Bonus: CAD Up to 5,000 · one time');
+    expect(summary).toHaveTextContent('Bonus: CAD Up to 5k / one time');
     expect(summary).toHaveTextContent(
       'Compensation (kind not reported): Currency not reported Amount not reported · period not reported'
     );
-    expect(summary).toHaveTextContent(
+    expect(
+      within(summary).getByRole('img', { name: /previously collected pay may be stale/ })
+    ).toBeInTheDocument();
+    expect(summary).not.toHaveTextContent('Job details incomplete');
+    expect(summary).not.toHaveTextContent('year');
+    const details = openDetails(container);
+    expect(details).toHaveTextContent('Base salary: USD 100,000–120,000 · period not reported');
+    expect(details).toHaveTextContent('Bonus: CAD Up to 5,000 · one time');
+    expect(details).toHaveTextContent(
       'Job details incomplete; previously collected pay may be stale.'
     );
-    expect(summary).not.toHaveTextContent('year');
-    openDetails(container);
     expect(screen.getByText('Reported range only.')).toBeInTheDocument();
   });
 
@@ -342,11 +381,18 @@ describe('JobCatalog', () => {
       entry.refreshStatus = refreshStatus;
       const { container } = render(<JobCatalog result={fixtureCatalog({ jobs: [entry] })} />);
       const summary = disclosure(container);
-      expect(summary).toHaveTextContent(
+      expect(
+        within(summary).getByRole('img', {
+          name: `Latest refresh ${refreshStatus}; previous observations may be stale.`,
+        })
+      ).toBeInTheDocument();
+      expect(summary).not.toHaveTextContent('Latest refresh');
+      const details = openDetails(container);
+      expect(details).toHaveTextContent(
         `Latest refresh ${refreshStatus}; previous observations may be stale.`
       );
-      expect(summary).toHaveTextContent('Active');
-      expect(summary).not.toHaveTextContent('Inactive');
+      expect(details).toHaveTextContent('Active');
+      expect(details).not.toHaveTextContent('Inactive');
     }
   );
 
@@ -377,7 +423,11 @@ describe('JobCatalog', () => {
     );
     expect(container.querySelectorAll('details')).toHaveLength(2);
     const summary = disclosure(container);
-    expect(summary).toHaveTextContent('Inactive · Inactive since Nov 25, 2026');
+    expect(summary).not.toHaveTextContent('Inactive');
+    const firstDetails = openDetails(container);
+    expect(firstDetails).toHaveTextContent('Inactive');
+    expect(firstDetails).toHaveTextContent('Inactive since');
+    expect(firstDetails).toHaveTextContent('Nov 25, 2026');
     const secondDetails = container.querySelectorAll('details')[1];
     fireEvent.click(secondDetails.querySelector('summary')!);
     expect(within(secondDetails).getByText('fixture-hirebase-id')).toBeInTheDocument();

@@ -1,8 +1,8 @@
 import '@mantine/core/styles.css';
 
 import React from 'react';
-import { ColorSchemeScript, mantineHtmlProps, MantineProvider } from '@mantine/core';
-import { theme } from '../theme';
+import { mantineHtmlProps } from '@mantine/core';
+import { SystemThemeProvider } from './SystemThemeProvider';
 import './resumes/tokens.css';
 
 export const metadata = {
@@ -15,13 +15,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" {...mantineHtmlProps}>
       <head>
-        <ColorSchemeScript defaultColorScheme="auto" />
+        <script
+          data-mantine-script
+          dangerouslySetInnerHTML={{
+            __html: `document.documentElement.setAttribute("data-mantine-color-scheme", window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");`,
+          }}
+        />
         <link rel="shortcut icon" href="/favicon.svg" />
       </head>
       <body>
-        <MantineProvider theme={theme} defaultColorScheme="auto">
-          {children}
-        </MantineProvider>
+        <SystemThemeProvider>{children}</SystemThemeProvider>
       </body>
     </html>
   );
