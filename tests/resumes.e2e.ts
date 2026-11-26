@@ -68,7 +68,7 @@ async function choose(page: Page, name: string) {
 for (const colorScheme of ['light', 'dark'] as const) {
   test(`system ${colorScheme} scheme is applied before hydration`, async ({ page }) => {
     await page.emulateMedia({ colorScheme });
-    // Leave the inline ColorSchemeScript running, but prevent React from hydrating.
+    // Leave the inline theme bootstrap running, but prevent React from hydrating.
     await page.route('**/_next/**/*.js*', (route) => route.abort());
     await page.goto('/resumes');
     await expect(page.locator('html')).toHaveAttribute('data-mantine-color-scheme', colorScheme);

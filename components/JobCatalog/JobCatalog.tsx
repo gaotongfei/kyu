@@ -28,9 +28,14 @@ function ObservationDate({ value, compact = false }: { value: string | null; com
   );
 }
 
-function compensationText(component: Compensation): string {
+function compensationText(component: Compensation, compact = false): string {
   const number = (value: number) =>
-    new Intl.NumberFormat('en', { maximumFractionDigits: 20 }).format(value);
+    new Intl.NumberFormat('en', {
+      notation: compact ? 'compact' : 'standard',
+      maximumFractionDigits: 20,
+    })
+      .format(value)
+      .replace(/K$/, 'k');
   const { min, max } = component;
   const amount =
     min !== null && max !== null
@@ -42,7 +47,15 @@ function compensationText(component: Compensation): string {
         : max !== null
           ? `Up to ${number(max)}`
           : 'Amount not reported';
-  return `${component.kind ?? 'Compensation (kind not reported)'}: ${component.currency ?? 'Currency not reported'} ${amount} · ${component.period ?? 'period not reported'}`;
+  const kind =
+    compact && /^(base( salary)?|salary)$/i.test(component.kind ?? '')
+      ? ''
+      : `${component.kind ?? 'Compensation (kind not reported)'}: `;
+  const period =
+    compact && component.period
+      ? ` / ${component.period}`
+      : ` · ${component.period ?? 'period not reported'}`;
+  return `${kind}${component.currency ?? 'Currency not reported'} ${amount}${period}`;
 }
 
 function externalHref(value: string | null): string | undefined {
@@ -197,69 +210,95 @@ function JobRow({ entry }: { entry: CatalogJob }) {
   const original = externalHref(job.jobUrl);
   const application = externalHref(job.applicationUrl);
   const upstream = externalHref(job.upstreamSource?.boardUrl ?? null);
-  const stale = entry.refreshStatus === 'failed' || entry.refreshStatus === 'partial';
+  const warnings = [
+    ...(entry.refreshStatus === 'failed' || entry.refreshStatus === 'partial'
+      ? [`Latest refresh ${entry.refreshStatus}; previous observations may be stale.`]
+      : []),
+    ...(job.detailsComplete === false
+      ? ['Job details incomplete; previously collected pay may be stale.']
+      : []),
+  ];
   return (
     <details className={classes.job}>
       <summary className={classes.summary}>
-        <span className={classes.row}>
-          <span className={classes.role}>
-            <span className={classes.jobTitle}>{job.title}</span>
-            <span className={classes.metadata}>{job.company}</span>
-            <span className={classes.metadata}>
-              Reported location:{' '}
-              {job.locations.length
-                ? job.locations
-                    .map(
-                      (location) =>
-                        location.text ||
-                        [location.city, location.region, location.country]
-                          .filter(Boolean)
-                          .join(', ') ||
-                        'Not specified'
-                    )
-                    .join(' · ')
-                : 'Not specified'}
-            </span>
-            <span className={classes.metadata}>
-              Work arrangement: {job.workArrangement ?? 'Not specified'} · Source wording:{' '}
-              {job.reportedWorkArrangement ?? 'Not specified'}
-            </span>
-          </span>
-          <span className={classes.pay}>
+        <span className={classes.jobTitle}>{job.title}</span>
+        <span className={classes.pay}>
+          <span>
             {job.compensation.length ? (
               job.compensation.map((component, index) => (
-                <span key={index}>{compensationText(component)}</span>
+                <span className={classes.payComponent} key={index}>
+                  {compensationText(component, true)}
+                </span>
               ))
             ) : (
-              <span>Salary not listed</span>
-            )}
-            <span>{job.employmentType ?? 'Employment type not specified'}</span>
-            {job.detailsComplete === false && (
-              <span className={classes.warning}>
-                Job details incomplete; previously collected pay may be stale.
-              </span>
+              <span className={classes.metadata}>Salary not listed</span>
             )}
           </span>
-        </span>
-        <span className={classes.observation}>
-          {providerNames[job.provider]} · {job.source} · Last observed{' '}
-          <ObservationDate value={entry.lastObservedAt} /> ·{' '}
-          {entry.active ? (
-            'Active'
-          ) : (
-            <>
-              Inactive · Inactive since <ObservationDate value={entry.inactiveAt} />
-            </>
+          {warnings.length > 0 && (
+            <span
+              className={classes.payWarning}
+              role="img"
+              aria-label={warnings.join(' ')}
+              title={warnings.join(' ')}
+            >
+              <CollectionIcon status="partial" />
+            </span>
           )}
         </span>
-        {stale && (
-          <span className={classes.stale}>
-            Latest refresh {entry.refreshStatus}; previous observations may be stale.
-          </span>
-        )}
-        <span className={classes.disclosureHint}>Show / hide reported details</span>
+        <span className={classes.location}>
+          {job.locations.length
+            ? job.locations
+                .map(
+                  (location) =>
+                    location.text ||
+                    [location.city, location.region, location.country].filter(Boolean).join(', ') ||
+                    'Not specified'
+                )
+                .join(' · ')
+            : 'Location not specified'}
+        </span>
+        <svg
+          className={classes.chevron}
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          aria-hidden="true"
+        >
+          <path d="m7 4 6 6-6 6" />
+        </svg>
       </summary>
       <div className={classes.details}>
+        <div className={classes.detailHeading}>
+          <div>
+            <h3>{job.company}</h3>
+            <p className={classes.metadata}>
+              {job.employmentType ?? 'Employment type not specified'} ·{' '}
+              {entry.active ? 'Active' : 'Inactive'}
+            </p>
+          </div>
+          <div className={classes.actions}>
+            {application ? (
+              <a className={classes.primaryAction} href={application}>
+                Open application
+              </a>
+            ) : (
+              <span className={classes.metadata}>Application link not reported</span>
+            )}
+            {original ? (
+              <a className={classes.textAction} href={original}>
+                Original listing
+              </a>
+            ) : (
+              <span className={classes.metadata}>Original listing link not reported</span>
+            )}
+          </div>
+        </div>
+        {warnings.map((warning) => (
+          <p className={classes.warning} key={warning}>
+            {warning}
+          </p>
+        ))}
         <h3>Reported job details</h3>
         <p className={classes.description}>{job.descriptionText ?? 'Description not reported.'}</p>
         {!job.descriptionComplete && (
@@ -357,22 +396,6 @@ function JobRow({ entry }: { entry: CatalogJob }) {
             jobs are not marked inactive by searches.
           </p>
         )}
-        <div className={classes.actions}>
-          {application ? (
-            <a className={classes.primaryAction} href={application}>
-              Open application
-            </a>
-          ) : (
-            <span className={classes.metadata}>Application link not reported</span>
-          )}
-          {original ? (
-            <a className={classes.textAction} href={original}>
-              Original listing
-            </a>
-          ) : (
-            <span className={classes.metadata}>Original listing link not reported</span>
-          )}
-        </div>
       </div>
     </details>
   );
@@ -436,25 +459,26 @@ export function JobCatalog({ result }: { result: CatalogResult }) {
             </section>
           ) : (
             <>
-              <CollectionReport report={result.lastRun} />
               <section aria-labelledby="catalog-heading">
                 <div className={classes.listHeading}>
-                  <h2 id="catalog-heading">
-                    {result.total} matching {result.total === 1 ? 'job' : 'jobs'} ·{' '}
-                    {filters.includeInactive ? 'Active and inactive listings' : 'Active listings'}
-                  </h2>
-                  <span>
-                    Most recently observed first ·{' '}
-                    <a
-                      href={catalogHref(filters, {
-                        includeInactive: !filters.includeInactive,
-                        page: 1,
-                      })}
-                    >
-                      {filters.includeInactive ? 'Hide inactive' : 'Include inactive'}
-                    </a>
-                  </span>
+                  <div className={classes.resultCount}>
+                    <h2 id="catalog-heading">
+                      {result.total} {result.total === 1 ? 'job' : 'jobs'}
+                    </h2>
+                    <span>
+                      {filters.includeInactive ? 'Active and inactive listings' : 'Active listings'}
+                    </span>
+                  </div>
+                  <CollectionReport report={result.lastRun} />
                 </div>
+                {result.jobs.length > 0 && (
+                  <div className={classes.columnHeadings} aria-hidden="true">
+                    <span>Job title</span>
+                    <span>Salary</span>
+                    <span>Reported location</span>
+                    <span />
+                  </div>
+                )}
                 {result.jobs.length ? (
                   result.jobs.map((entry) => (
                     <JobRow
@@ -479,6 +503,17 @@ export function JobCatalog({ result }: { result: CatalogResult }) {
                     )}
                   </div>
                 )}
+                <div className={classes.listOptions}>
+                  <span>Most recently observed first</span>
+                  <a
+                    href={catalogHref(filters, {
+                      includeInactive: !filters.includeInactive,
+                      page: 1,
+                    })}
+                  >
+                    {filters.includeInactive ? 'Hide inactive' : 'Include inactive'}
+                  </a>
+                </div>
                 <footer className={classes.footer}>
                   <span>
                     Showing {result.total ? (result.page - 1) * result.pageSize + 1 : 0}–
