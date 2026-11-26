@@ -221,7 +221,10 @@ function JobRow({ entry }: { entry: CatalogJob }) {
   return (
     <details className={classes.job}>
       <summary className={classes.summary}>
-        <span className={classes.jobTitle}>{job.title}</span>
+        <span className={classes.jobHeading}>
+          <span className={classes.jobTitle}>{job.title}</span>
+          <span className={classes.companyName}>{job.company}</span>
+        </span>
         <span className={classes.pay}>
           <span>
             {job.compensation.length ? (

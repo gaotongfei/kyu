@@ -328,7 +328,19 @@
   background: var(--kyu-surface);
 }
 
+.jobHeading {
+  min-width: 0;
+}
+
+.companyName {
+  display: block;
+  margin-top: var(--kyu-space-1);
+  color: var(--kyu-muted);
+  font-size: var(--kyu-type-small);
+}
+
 .jobTitle {
+  display: block;
   min-width: 0;
   color: var(--kyu-ink);
   font-size: 1rem;
@@ -524,9 +536,12 @@
     padding: var(--kyu-space-4) 0;
   }
 
-  .jobTitle {
+  .jobHeading {
     grid-column: 1;
     grid-row: 1;
+  }
+
+  .jobTitle {
     font-size: 0.9375rem;
   }
 

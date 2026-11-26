@@ -213,14 +213,15 @@ describe('JobCatalog', () => {
     );
   });
 
-  it('shows only title, salary and location in the native summary and reveals all other facts on click', () => {
+  it('shows company with title, salary and location before expanding the native row', () => {
     const { container } = render(<JobCatalog result={fixtureCatalog()} />);
     const summary = disclosure(container);
     expect(summary).toHaveTextContent(
-      /^Fixture engineerCAD 150k–190k \/ yearToronto, Canada · New York, US$/
+      /^Fixture engineerFixture employerCAD 150k–190k \/ yearToronto, Canada · New York, US$/
     );
+    expect(within(summary).getByText('Fixture employer')).toBeVisible();
+    expect(summary.querySelector('img')).toBeNull();
     for (const text of [
-      'Fixture employer',
       'Work arrangement',
       'Remote in Canada or the US',
       'Full time',
@@ -234,9 +235,8 @@ describe('JobCatalog', () => {
     }
     expect(summary.querySelector('a, button, input')).toBeNull();
     expect(screen.getByText('Open application')).not.toBeVisible();
-    expect(screen.getByText('Fixture employer')).not.toBeVisible();
     const details = openDetails(container);
-    expect(screen.getByText('Fixture employer')).toBeVisible();
+    expect(within(details).getByRole('heading', { name: 'Fixture employer' })).toBeVisible();
     expect(details).toHaveTextContent('Full time');
     expect(details).toHaveTextContent('Active');
     expect(details).toHaveTextContent('Remote in Canada or the US');
@@ -264,6 +264,21 @@ describe('JobCatalog', () => {
     fireEvent.click(summary);
     expect(details).not.toHaveAttribute('open');
   });
+
+  it.each(['ashby', 'greenhouse', 'hirebase'] as const)(
+    'uses the same text-only company presentation for %s',
+    (provider) => {
+      const entry = fixtureJob();
+      entry.job.provider = provider;
+      const { container } = render(<JobCatalog result={fixtureCatalog({ jobs: [entry] })} />);
+      const summary = disclosure(container);
+      expect(within(summary).getByText('Fixture employer')).toBeVisible();
+      expect(summary.querySelector('img, abbr')).toBeNull();
+      expect(summary).toHaveTextContent(
+        /^Fixture engineerFixture employerCAD 150k–190k \/ yearToronto, Canada · New York, US$/
+      );
+    }
+  );
 
   it.each([
     [149500, 190250, 'CAD 149.5k–190.25k / year'],
