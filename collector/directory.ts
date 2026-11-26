@@ -2,9 +2,9 @@ import { createHash } from 'node:crypto';
 import { boardKey, boardUrl } from './config';
 import type { Board, BoardProvider } from './types';
 
-export const directoryCommit = '2816bfadd65b7bbec23701dd036bcc7496c729db';
-export const directoryPath = 'ats-directory/lastroundai-ats-company-directory-2026-08.csv';
-export const directoryUrl = `https://raw.githubusercontent.com/fyrosofttech/lastroundai-hiring-data/${directoryCommit}/${directoryPath}`;
+const directoryCommit = '2816bfadd65b7bbec23701dd036bcc7496c729db';
+const directoryPath = 'ats-directory/lastroundai-ats-company-directory-2026-08.csv';
+const directoryUrl = `https://raw.githubusercontent.com/fyrosofttech/lastroundai-hiring-data/${directoryCommit}/${directoryPath}`;
 const snapshotHash = 'e637a04d06561bb3839dbf95a291e5fd11ac26b8f2858dc207939c1b723974a3';
 
 function csvRows(text: string): string[][] {
