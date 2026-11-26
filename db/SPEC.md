@@ -16,9 +16,11 @@ The core does not load environment files or connect merely because it is importe
 
 `db/schema.ts` and generated `db/migrations/` are authoritative. Collection owns only the `collection_*` tables: normalized source records and observation/lifecycle state; board outcomes; run/configuration snapshots; conservative monthly usage/reservation audit; and content-free deletion suppressions. Matching and lifecycle decisions belong to `kyu-collection`, not generic database helpers.
 
-Provider identity is unique within its source scope. Quota amounts are database-constrained to the local free ceiling, and reservations reference their runs. API keys are never stored: accounting uses a one-way key fingerprint. Configuration/report snapshots project allowed fields rather than passing arbitrary objects or provider responses into JSON columns.
+Provider identity is unique within its source scope. Quota amounts are database-constrained to the local free ceiling, and reservations reference their runs. Collection API keys are never stored: accounting uses a one-way key fingerprint. Configuration/report snapshots project allowed fields rather than passing arbitrary objects or provider responses into JSON columns.
 
 The editor owns the `resumes` table and its published `0000_resume_documents` migration; collection adds its six tables without altering that migration, snapshot or resume data. No profile, authentication or MCP tables are part of collection.
+
+Writing assistance owns the singleton `ai_settings` row: public provider/model preferences, encrypted credential-slot/key-check envelopes, a stable installation host UUID, and an update timestamp. The additive migration changes neither resumes nor collection tables. `kyu-assistance` owns encryption/authorization and the common transaction/row lock; PostgreSQL stores no plaintext provider keys or OAuth tokens. The server installation key is external to the database. This is one private instance's configuration, not a user/authentication schema.
 
 ## Migration history across branches
 

@@ -1,6 +1,6 @@
 # Kyu
 
-A self-hosted Markdown resume editor and manually collected job catalog. There is no authentication: run only on a private machine/network with one trusted operator.
+A self-hosted Markdown resume editor, manually collected job catalog, and optional application-writing assistant. There is no authentication: run only on a private machine/network with one trusted operator.
 
 ## Local development
 
@@ -45,6 +45,22 @@ Add `HIREBASE_API_KEY` only to this workspace's server environment for Hirebase.
 
 See [collector operations](collector/README.md) for budgets, partial-source behavior, pruning/purge and verification limits, and [directory/configuration rules](collector/DIRECTORY.md) for matching, attribution and reviewed contributions.
 
+## Application drafts
+
+From a collected job, open **Prepare drafts**, select a saved resume, and generate a tailored resume and cover letter. Review/edit both drafts; save the resume as a **new** document or download Markdown. Your original is never overwritten. AI is not used for job matching, and ordinary page reads never generate content.
+
+After `yarn db:migrate`, generate a 32-byte installation key and set it as `KYU_AI_ENCRYPTION_KEY` in the server environment:
+
+```sh
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
+```
+
+Restart Kyu, open `/settings/ai`, connect **OpenAI API** or **OpenRouter**, then explicitly select a connection/model. Keys and tokens are encrypted in PostgreSQL and never returned to the browser. Back up the installation key securely with the database: changing or losing it makes saved connections unreadable. Do not paste credentials into chat or commit them.
+
+Supported same-computer HTTP-loopback installations can also **Continue with ChatGPT** using the official eligible-plan preview. Open the app locally (for example `http://127.0.0.1:3000`); its callback must reach `/auth/callback` on that same loopback port. The same port must be reachable if using a local container. Remote/server visits use API keys; ChatGPT-plan sign-in is not a general remote-hosted integration. Manage usage opens ChatGPT's controls. No Codex installation or existing Codex login is used.
+
+Generation sends the selected saved resume and stored job description to the chosen provider; OpenRouter also routes them to its model provider. Usage charges or plan limits apply, and provider retention rules still apply. No automatic retry or billing fallback occurs. Inputs are limited to 20,000 characters each. API-key requests cap output at 8,000 tokens; ChatGPT's preview instead has local received-output/time limits, not a guaranteed allowance cap. Drafts are transient until saved/downloaded; review all factual claims. Live provider/account acceptance remains an operator check—automated verification uses fixtures, never personal accounts or paid calls.
+
 ## Migrations across branches
 
 New migrations use UTC timestamp prefixes for SQL and snapshots:
@@ -61,6 +77,7 @@ The published `0000_resume_documents` migration remains unchanged. Timestamp nam
 ```sh
 yarn test
 yarn test:db
+yarn test:assistance          # fixture-only OAuth/JOSE protocol checks; included in yarn test
 yarn test:collection:postgres
 yarn build
 KYU_BASE_URL=http://127.0.0.1:3017 yarn test:e2e
@@ -72,4 +89,4 @@ The database runners create/remove only their own ephemeral loopback PostgreSQL 
 
 Local verification uses installed Node 24.14.1; the `.nvmrc` version, 26.13.1, remains unverified here. No deployment or push is performed by these checks.
 
-Contracts: [architecture](ARCHITECTURE.md), [resume editor](app/resumes/SPEC.md), [catalog](jobs/SPEC.md), [collector](collector/SPEC.md), [database](db/SPEC.md). Private references remain ignored and are not runtime inputs.
+Contracts: [product](GOALS.md), [architecture](ARCHITECTURE.md), [resume editor](app/resumes/SPEC.md), [catalog](jobs/SPEC.md), [collector](collector/SPEC.md), [writing assistance](assistance/SPEC.md), [database](db/SPEC.md). Private references remain ignored and are not runtime inputs.

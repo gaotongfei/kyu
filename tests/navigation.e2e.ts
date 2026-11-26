@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 async function layout(page: Page) {
+  await expect(page.locator('header')).toHaveCount(1);
   return page.locator('header').evaluate((header) => {
     const bounds = (element: Element) => {
       const { x, y, width, height } = element.getBoundingClientRect();

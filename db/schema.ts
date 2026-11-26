@@ -11,6 +11,7 @@ import {
   timestamp,
   uuid,
 } from 'drizzle-orm/pg-core';
+import type { AiProvider, AiSettings } from '../assistance/model';
 import type {
   Board,
   CollectedJob,
@@ -34,6 +35,22 @@ export const resumes = pgTable(
     check('resumes_version_positive', sql`${table.version} > 0`),
     check('resumes_classic_theme', sql`${table.themeKey} = 'classic'`),
   ]
+);
+
+// One private installation, not a user/account table. All credential values are envelopes.
+export const aiSettings = pgTable(
+  'ai_settings',
+  {
+    id: integer('id').primaryKey().default(1),
+    hostId: uuid('host_id').notNull(),
+    settings: jsonb('settings').$type<Omit<AiSettings, 'encryptionConfigured'>>().notNull(),
+    credentials: jsonb('credentials')
+      .$type<Partial<Record<AiProvider | 'pending', string>>>()
+      .notNull(),
+    keyCheck: text('key_check').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [check('ai_settings_singleton', sql`${table.id} = 1`)]
 );
 
 export const collectionJobs = pgTable(

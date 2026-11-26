@@ -4,11 +4,12 @@ type: module-design
 title: Resume editor
 status: draft
 parent: job-landing-goals
+references: [kyu-assistance]
 ---
 
 # Resume editor
 
-A private, single-operator editor for named resumes, each with one freely editable Markdown document. This module owns editing, document actions, transient import drafts, and source/PDF exports. Database declarations remain in `db/schema.ts`; the existing postgres-js/Drizzle client owns connections. There is no account, ownership, public-service access control, AI service, or separate backend. Run only on a trusted private machine/network; bind local services to loopback. Robots directives and no-store responses are privacy hygiene, not authentication.
+A private, single-operator editor for named resumes, each with one freely editable Markdown document. This module owns editing, document actions, transient import drafts, and source/PDF exports. Database declarations remain in `db/schema.ts`; the existing postgres-js/Drizzle client owns connections. There is no account, ownership, public-service access control, or separate backend. The editor itself invokes no AI service; optional application-writing assistance (`kyu-assistance`) is a separate consumer of the existing create-only document boundary and never updates its source resume. Run only on a trusted private machine/network; bind local services to loopback. Robots directives and no-store responses are privacy hygiene, not authentication.
 
 ## Source and persistence
 

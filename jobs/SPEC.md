@@ -5,7 +5,7 @@ status: draft
 title: Read-only collected job catalog
 parent: kyu-architecture
 depends-on: [kyu-database]
-references: [kyu-collection]
+references: [kyu-collection, kyu-assistance]
 ---
 
 ## Read-only boundary
@@ -22,7 +22,7 @@ Collapsed rows show job title with the employer beneath it, salary and reported 
 
 Summary pay uses compact amounts without currency conversion or discarding reported precision; expanded compensation keeps exact numbers and every component. Currency, period, component-kind distinctions and missing facts remain explicit rather than inferring yearly base salary. Failed/partial refreshes and incomplete pay details have a labeled warning icon beside summary pay and full warning text inside the expanded row, so reduced visual clutter does not imply fresh verification. Hirebase observations remain identified as search samples in details, not full employer-board refreshes.
 
-No accounts, fit scores, saving, swipe interactions, AI preparation, application submission or web-based collection/admin controls are supplied by this catalog. Catalog GET forms and pagination/reset links target `/jobs` directly so filters are not lost through the root redirect. The existing editor remains independently usable at `/resumes`; catalog changes do not rewrite its UI.
+No accounts, fit scores, saving, swipe interactions, AI generation, application submission or web-based collection controls are supplied by this catalog. A Prepare drafts anchor outside each disclosure summary opens `kyu-assistance` using the exact source/job identity; following that link does not itself generate content. Catalog GET forms and pagination/reset links target `/jobs` directly so filters are not lost through the root redirect. The existing editor remains independently usable at `/resumes`; catalog changes do not rewrite its UI.
 
 ## Failure and access states
 

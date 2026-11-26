@@ -688,6 +688,17 @@ describe('JobCatalog', () => {
     );
   });
 
+  it('links to draft preparation by exact source identity outside the disclosure summary', () => {
+    const { container } = render(<JobCatalog result={fixtureCatalog()} />);
+    openDetails(container);
+    const link = screen.getByRole('link', { name: 'Prepare drafts' });
+    const url = new URL(link.getAttribute('href')!, 'http://localhost');
+    expect(url.pathname).toBe('/prepare');
+    expect(url.searchParams.get('source')).toBe('ashby:fixture-board');
+    expect(url.searchParams.get('job')).toBe('fixture-job-1');
+    expect(link.closest('summary')).toBeNull();
+  });
+
   it('does not turn unsupported source URLs into executable links', () => {
     const entry = fixtureJob();
     // eslint-disable-next-line no-script-url -- Malicious fixture verifies unsafe links are rejected.

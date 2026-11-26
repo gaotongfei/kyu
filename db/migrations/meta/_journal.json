@@ -15,6 +15,13 @@
       "when": 1795677122843,
       "tag": "20261126071202_job_collection",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795706757133,
+      "tag": "20261126152557_ai_connection_settings",
+      "breakpoints": true
     }
   ]
 }

@@ -1,3 +1,4 @@
+import { preparationHref } from '../../assistance/links';
 import type { Compensation, Provider, RunReport } from '../../collector/types';
 import { catalogHref } from '../../jobs/filters';
 import type { CatalogJob, CatalogResult } from '../../jobs/types';
@@ -281,6 +282,9 @@ function JobRow({ entry }: { entry: CatalogJob }) {
             </p>
           </div>
           <div className={classes.actions}>
+            <a className={classes.textAction} href={preparationHref(job.source, job.sourceJobId)}>
+              Prepare drafts
+            </a>
             {application ? (
               <a className={classes.primaryAction} href={application}>
                 Open application
