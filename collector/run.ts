@@ -31,7 +31,7 @@ export async function runCollection(
     throw new Error('Hirebase invocation budget must be between 0 and 500');
   }
   const now = options.now ?? (() => new Date());
-  const http = options.http ?? new ProviderHttp();
+  const http = (options.http ?? new ProviderHttp()).guarded(() => store.assertLock());
   const report: RunReport = {
     id: randomUUID(),
     startedAt: now().toISOString(),

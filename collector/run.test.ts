@@ -30,6 +30,7 @@ function fixtureStore() {
   const release = jest.fn(async () => {});
   const store: jest.Mocked<CollectionStore> = {
     acquireLock: jest.fn(async () => release),
+    assertLock: jest.fn(async () => {}),
     startRun: jest.fn<
       ReturnType<CollectionStore['startRun']>,
       Parameters<CollectionStore['startRun']>

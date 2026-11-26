@@ -3,6 +3,7 @@ import type { Board, CollectedJob, CollectionConfig, RunReport, SavedSearch } fr
 
 export interface CollectionStore {
   acquireLock(): Promise<() => Promise<void>>;
+  assertLock(): Promise<void>;
   startRun(report: RunReport, config: CollectionConfig): Promise<void>;
   saveReport(report: RunReport): Promise<void>;
   prune(searches: SavedSearch[]): Promise<number>;

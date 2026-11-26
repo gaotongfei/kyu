@@ -21,6 +21,7 @@ export interface HttpOptions {
   maxBytes?: number;
   retries?: number;
   maxRetryWaitMs?: number;
+  beforeRequest?: () => Promise<void>;
 }
 
 export class ProviderHttp {
@@ -30,6 +31,7 @@ export class ProviderHttp {
   private readonly maxBytes: number;
   private readonly retries: number;
   private readonly maxRetryWaitMs: number;
+  private readonly beforeRequest?: () => Promise<void>;
 
   constructor(options: HttpOptions = {}) {
     this.fetcher = options.fetch ?? globalThis.fetch;
@@ -40,6 +42,22 @@ export class ProviderHttp {
     this.maxBytes = options.maxBytes ?? 8_000_000;
     this.retries = options.retries ?? 2;
     this.maxRetryWaitMs = options.maxRetryWaitMs ?? 10000;
+    this.beforeRequest = options.beforeRequest;
+  }
+
+  guarded(check: () => Promise<void>): ProviderHttp {
+    return new ProviderHttp({
+      fetch: this.fetcher,
+      sleep: this.sleep,
+      timeoutMs: this.timeoutMs,
+      maxBytes: this.maxBytes,
+      retries: this.retries,
+      maxRetryWaitMs: this.maxRetryWaitMs,
+      beforeRequest: async () => {
+        await this.beforeRequest?.();
+        await check();
+      },
+    });
   }
 
   async request(url: string, init: RequestInit = {}): Promise<HttpReply> {
@@ -57,6 +75,7 @@ export class ProviderHttp {
     }
     const method = init.method ?? 'GET';
     for (let attempt = 0; ; attempt += 1) {
+      await this.beforeRequest?.();
       let response: Response;
       try {
         response = await this.fetcher(url, {

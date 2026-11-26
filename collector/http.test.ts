@@ -74,6 +74,19 @@ test('enforces retry, response-size and valid-JSON bounds', async () => {
   ).rejects.toThrow('invalid');
 });
 
+test('lease guards run before every attempt and block further provider requests', async () => {
+  const fetcher = jest.fn().mockResolvedValue(reply({}, 503));
+  let checks = 0;
+  const http = new ProviderHttp({ fetch: fetcher, sleep: async () => {} }).guarded(async () => {
+    checks += 1;
+    if (checks > 1) {
+      throw new Error('Collector lease lost');
+    }
+  });
+  await expect(http.request(url)).rejects.toThrow('lease lost');
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
 test('bounds concurrent workers while preserving order', async () => {
   let active = 0;
   let maximum = 0;

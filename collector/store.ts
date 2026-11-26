@@ -17,7 +17,8 @@ import type { Board, CollectedJob, CollectionConfig, RunReport, SavedSearch } fr
 
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 const COLLECTOR_LOCK = 1264145731; // Fixed, session-scoped collector lock ("KYUC").
-const SOURCE_LOCK_NAMESPACE = 1264145747; // Separate two-int transaction lock namespace.
+const SOURCE_LOCK_NAMESPACE = 1264145747;
+const STARTUP_LOCK = 1264145748;
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9_-]{0,199}$/;
 
 class StoreError extends Error {}
@@ -157,6 +158,14 @@ async function lockSource(tx: Transaction, source: string): Promise<void> {
 }
 
 export class PostgresCollectionStore implements CollectionStore {
+  private lockRequired = false;
+  private lease: {
+    session: Awaited<ReturnType<DatabaseClient['reserve']>>;
+    pid: number;
+    valid: boolean;
+  } | null = null;
+  private activeRunId: string | null = null;
+
   constructor(
     private readonly db: Database,
     private readonly client: DatabaseClient
@@ -164,11 +173,15 @@ export class PostgresCollectionStore implements CollectionStore {
 
   async acquireLock(): Promise<() => Promise<void>> {
     return safely('Collector lock could not be acquired', async () => {
+      this.lockRequired = true;
       const session = await this.client.reserve();
       try {
         const [row] =
-          await session`select pg_try_advisory_lock(${COLLECTOR_LOCK}::bigint) as locked`;
+          await session`select pg_try_advisory_lock(${COLLECTOR_LOCK}::bigint) as locked, pg_backend_pid() as pid`;
         requireValue(row?.locked === true, 'Another collector run is already active');
+        requireValue(Number.isSafeInteger(row.pid), 'Collector lock backend could not be verified');
+        this.lease = { session, pid: row.pid, valid: true };
+        this.activeRunId = null;
       } catch (error) {
         try {
           // Also clean up an ambiguously completed acquisition, if the session is still alive.
@@ -184,13 +197,49 @@ export class PostgresCollectionStore implements CollectionStore {
       return () => {
         released ??= safely('Collector lock could not be released', async () => {
           try {
-            await session`select pg_advisory_unlock(${COLLECTOR_LOCK}::bigint)`;
+            if (this.lease?.valid) {
+              await session`select pg_advisory_unlock(${COLLECTOR_LOCK}::bigint)`;
+            }
           } finally {
+            if (this.lease) {
+              this.lease.valid = false;
+            }
             session.release();
           }
         });
         return released;
       };
+    });
+  }
+
+  async assertLock(): Promise<void> {
+    if (!this.lockRequired) {
+      return;
+    }
+    const lease = this.lease;
+    requireValue(lease !== null && lease.valid, 'Collector lock lease was lost');
+    try {
+      const [row] =
+        await lease.session`select pg_backend_pid() as pid, exists(select 1 from pg_locks where locktype = 'advisory' and pid = pg_backend_pid() and classid = 0 and objid = ${COLLECTOR_LOCK}::oid and objsubid = 1 and granted) as locked`;
+      requireValue(row?.pid === lease.pid && row?.locked === true, 'Collector lock lease was lost');
+    } catch {
+      lease.valid = false;
+      throw new StoreError('Collector lock lease was lost');
+    }
+  }
+
+  private async transaction<T>(work: (tx: Transaction) => Promise<T>): Promise<T> {
+    await this.assertLock();
+    return this.db.transaction(async (tx) => {
+      if (this.activeRunId) {
+        const [run] = await tx
+          .select({ status: collectionRuns.status })
+          .from(collectionRuns)
+          .where(eq(collectionRuns.id, this.activeRunId))
+          .for('update');
+        requireValue(run?.status === 'running', 'Collector run was fenced by a newer invocation');
+      }
+      return work(tx);
     });
   }
 
@@ -200,12 +249,16 @@ export class PostgresCollectionStore implements CollectionStore {
       report.status === 'running' && report.finishedAt === null,
       'A new collector run must be running'
     );
+    await this.assertLock();
     await safely('Collector run could not be started', () =>
       this.db.transaction(async (tx) => {
+        await tx.execute(sql`select pg_advisory_xact_lock(${STARTUP_LOCK}::bigint)`);
+        await this.assertLock();
         const interrupted = await tx
           .select({ id: collectionRuns.id, report: collectionRuns.report })
           .from(collectionRuns)
-          .where(eq(collectionRuns.status, 'running'));
+          .where(eq(collectionRuns.status, 'running'))
+          .for('update');
         if (interrupted.length) {
           await tx
             .update(collectionReservations)
@@ -243,27 +296,30 @@ export class PostgresCollectionStore implements CollectionStore {
         });
       })
     );
+    this.activeRunId = report.id;
   }
 
   async saveReport(report: RunReport): Promise<void> {
     const startedAt = validDate(report.startedAt);
     const finishedAt = report.finishedAt === null ? null : validDate(report.finishedAt);
     await safely('Collector report could not be saved', async () => {
-      await this.db
-        .update(collectionRuns)
-        .set({
-          status: report.status,
-          startedAt,
-          finishedAt,
-          report: reportSnapshot(report),
-        })
-        .where(eq(collectionRuns.id, report.id));
+      await this.transaction(async (tx) =>
+        tx
+          .update(collectionRuns)
+          .set({
+            status: report.status,
+            startedAt,
+            finishedAt,
+            report: reportSnapshot(report),
+          })
+          .where(eq(collectionRuns.id, report.id))
+      );
     });
   }
 
   async prune(searches: SavedSearch[]): Promise<number> {
     return safely('Collector catalog could not be pruned', () =>
-      this.db.transaction(async (tx) => {
+      this.transaction(async (tx) => {
         const jobs = await tx
           .select({
             source: collectionJobs.source,
@@ -317,7 +373,7 @@ export class PostgresCollectionStore implements CollectionStore {
       seen.add(job.sourceJobId);
     }
     return safely('Collector source could not be persisted', () =>
-      this.db.transaction(async (tx) => {
+      this.transaction(async (tx) => {
         await lockSource(tx, options.source);
         const existing = await tx
           .select({ sourceJobId: collectionJobs.sourceJobId, payload: collectionJobs.payload })
@@ -412,22 +468,24 @@ export class PostgresCollectionStore implements CollectionStore {
         lastStatus: outcome.status,
         lastMessage: safeMessage(outcome.message),
       };
-      await this.db
-        .insert(collectionBoards)
-        .values({
-          source,
-          ...content,
-          verifiedAt: verified ? time : null,
-          lastSuccessAt: successful ? time : null,
-        })
-        .onConflictDoUpdate({
-          target: collectionBoards.source,
-          set: {
+      await this.transaction(async (tx) =>
+        tx
+          .insert(collectionBoards)
+          .values({
+            source,
             ...content,
-            ...(verified ? { verifiedAt: time } : {}),
-            ...(successful ? { lastSuccessAt: time } : {}),
-          },
-        });
+            verifiedAt: verified ? time : null,
+            lastSuccessAt: successful ? time : null,
+          })
+          .onConflictDoUpdate({
+            target: collectionBoards.source,
+            set: {
+              ...content,
+              ...(verified ? { verifiedAt: time } : {}),
+              ...(successful ? { lastSuccessAt: time } : {}),
+            },
+          })
+      );
     });
   }
 
@@ -446,7 +504,7 @@ export class PostgresCollectionStore implements CollectionStore {
     );
     const scope = and(eq(collectionUsage.account, account), eq(collectionUsage.period, period));
     const used = await safely('Hirebase usage could not be read', () =>
-      this.db.transaction(async (tx) => {
+      this.transaction(async (tx) => {
         await tx.insert(collectionUsage).values({ account, period, used: 0 }).onConflictDoNothing();
         const [row] = await tx
           .select({ used: collectionUsage.used })
@@ -469,7 +527,7 @@ export class PostgresCollectionStore implements CollectionStore {
         );
         const reservation = randomUUID();
         const nextUsed = await safely('Hirebase allowance could not be reserved', () =>
-          this.db.transaction(async (tx) => {
+          this.transaction(async (tx) => {
             const [row] = await tx
               .update(collectionUsage)
               .set({ used: sql`${collectionUsage.used} + ${amount}` })
@@ -503,7 +561,7 @@ export class PostgresCollectionStore implements CollectionStore {
           'Invalid Hirebase returned count'
         );
         const nextUsed = await safely('Hirebase reservation could not be settled', () =>
-          this.db.transaction(async (tx) => {
+          this.transaction(async (tx) => {
             const reservationScope = and(
               eq(collectionReservations.id, reservation),
               eq(collectionReservations.runId, runId),
@@ -553,7 +611,7 @@ export class PostgresCollectionStore implements CollectionStore {
       'Invalid collector job identity'
     );
     await safely('Collector job could not be purged', () =>
-      this.db.transaction(async (tx) => {
+      this.transaction(async (tx) => {
         await lockSource(tx, source);
         await clearJob(tx, source, sourceJobId);
         const deletedAt = new Date();

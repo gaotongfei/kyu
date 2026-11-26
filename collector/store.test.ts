@@ -118,7 +118,9 @@ function updateClause(entry: Query): string {
 // These fixtures verify generated SQL/contracts, not PostgreSQL concurrency or rollback semantics.
 test('holds a dedicated session lock while independent source transactions commit, with idempotent release', async () => {
   const f = fixture();
-  f.session.mockResolvedValueOnce([{ locked: true }]);
+  f.session
+    .mockResolvedValueOnce([{ locked: true, pid: 123 }])
+    .mockResolvedValue([{ locked: true, pid: 123 }]);
   const release = await f.store.acquireLock();
   expect(f.client.reserve).toHaveBeenCalledTimes(1);
   expect(f.client.begin).not.toHaveBeenCalled();
@@ -127,9 +129,10 @@ test('holds a dedicated session lock while independent source transactions commi
   expect(f.events).toEqual(['begin', 'commit']);
   expect(f.session.release).not.toHaveBeenCalled();
   await Promise.all([release(), release()]);
-  expect(f.session).toHaveBeenCalledTimes(2);
-  expect(f.session.mock.calls[1][0].join('')).toContain('pg_advisory_unlock');
-  expect(f.session.mock.calls[1][1]).toBe(f.session.mock.calls[0][1]);
+  expect(f.session).toHaveBeenCalledTimes(3);
+  expect(f.session.mock.calls[1][0].join('')).toContain('pg_locks');
+  expect(f.session.mock.calls[2][0].join('')).toContain('pg_advisory_unlock');
+  expect(f.session.mock.calls[2][1]).toBe(f.session.mock.calls[0][1]);
   expect(f.session.release).toHaveBeenCalledTimes(1);
 });
 
@@ -152,7 +155,7 @@ test.each([
 test('releases a session even when unlocking fails, without leaking the driver diagnostic', async () => {
   const f = fixture();
   f.session
-    .mockResolvedValueOnce([{ locked: true }])
+    .mockResolvedValueOnce([{ locked: true, pid: 123 }])
     .mockRejectedValueOnce(new Error('secret payload'));
   const release = await f.store.acquireLock();
   await expect(release()).rejects.toThrow('Collector lock could not be released');
@@ -164,7 +167,7 @@ test('releases a session even when unlocking fails, without leaking the driver d
 test('recovers running reports and only pending reservations without touching persistent usage', async () => {
   const f = fixture();
   const previous = { ...report('old'), startedAt: '2026-11-25T00:00:00Z' };
-  f.replies.push([['old', previous]], [], [], []);
+  f.replies.push([], [['old', previous]], [], [], []);
   const config: CollectionConfig = { boards: [board], searches: [search] };
   await f.store.startRun(
     { ...report(), rawResponse: job() } as RunReport,

@@ -75,6 +75,21 @@ export function normalizeHirebase(value: unknown): CollectedJob {
   const html = text(data.description_raw) ?? text(data.description);
   const salary = data.salary_range == null ? null : record(data.salary_range);
   const reportedArrangement = text(data.location_type);
+  const locations =
+    data.locations == null
+      ? []
+      : array(data.locations).map((entry) => {
+          const item = record(entry);
+          return location({
+            ...item,
+            text: text(item.address),
+            country: normalizeCountry(text(item.country)),
+          });
+        });
+  const rawLocation = text(data.location_raw);
+  if (rawLocation && !locations.some((entry) => entry.text === rawLocation)) {
+    locations.push({ text: rawLocation, city: null, region: null, country: null });
+  }
   return {
     provider: 'hirebase',
     source: 'hirebase',
@@ -86,17 +101,7 @@ export function normalizeHirebase(value: unknown): CollectedJob {
     descriptionHtml: html,
     descriptionText: htmlToText(html),
     descriptionComplete: text(data.description_raw) !== null,
-    locations:
-      data.locations == null
-        ? [{ text: text(data.location_raw), city: null, region: null, country: null }]
-        : array(data.locations).map((entry) => {
-            const item = record(entry);
-            return location({
-              ...item,
-              text: text(item.address) ?? text(data.location_raw),
-              country: normalizeCountry(text(item.country)),
-            });
-          }),
+    locations,
     workArrangement: arrangement(reportedArrangement),
     reportedWorkArrangement: reportedArrangement,
     employmentType: text(data.job_type),
@@ -212,108 +217,116 @@ export async function collectHirebase(options: {
     if (!active.length) {
       break;
     }
-    const roundBudget = available;
-    for (let index = 0; index < active.length && available > 0; index += 1) {
-      const state = active[index];
-      if ((options.now?.() ?? new Date()).toISOString().slice(0, 7) !== usage.period) {
-        for (const pending of states.filter((entry) => !entry.done)) {
-          pending.done = true;
-          pending.result.status = 'partial';
-          pending.result.message =
-            'UTC month changed; invoke collection again to verify the new allowance';
-        }
+    active.sort((left, right) => left.result.fetched - right.result.fetched);
+    const state = active[0];
+    if ((options.now?.() ?? new Date()).toISOString().slice(0, 7) !== usage.period) {
+      for (const pending of states.filter((entry) => !entry.done)) {
+        pending.done = true;
+        pending.result.status = 'partial';
+        pending.result.message =
+          'UTC month changed; invoke collection again to verify the new allowance';
+      }
+      stop = true;
+      break;
+    }
+    if (state.calls >= (options.maxPagesPerSearch ?? 500)) {
+      state.done = true;
+      state.result.status = 'partial';
+      state.result.message = 'Hirebase search reached the page safety limit';
+      continue;
+    }
+    const nextLevel = active.find((entry) => entry.result.fetched > state.result.fetched)?.result
+      .fetched;
+    const share =
+      nextLevel === undefined
+        ? Math.max(1, Math.floor(available / active.length))
+        : nextLevel - state.result.fetched;
+    const limit = alignedPageSize(state.offset, Math.min(share, available));
+    if (!limit) {
+      continue;
+    }
+    const page = state.offset / limit + 1;
+    const reservation = await ledger.reserve(limit, state.search.id);
+    available -= limit;
+    result.reserved += limit;
+    let charged: number | null = null;
+    let unsafeAllowance = false;
+    try {
+      const response = await http.request('https://api.hirebase.org/v2/jobs/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': key },
+        body: JSON.stringify({ ...requestFilters(state.search), limit, page }),
+      });
+      const envelope = record(response.data);
+      const rawJobs = array(envelope.jobs);
+      if (rawJobs.length > limit) {
+        throw new Error('Hirebase returned more records than requested');
+      }
+      charged = rawJobs.length;
+      result.returned += charged;
+      state.result.fetched += charged;
+      const reportedRemaining = response.headers.get('Hirebase-Usage-Included-Remaining');
+      result.providerRemaining = Math.max(0, result.providerRemaining - charged);
+      if (reportedRemaining !== null) {
+        result.providerRemaining = Math.min(
+          result.providerRemaining,
+          integer(Number(reportedRemaining))
+        );
+      }
+      const overage = response.headers.get('Hirebase-Usage-Overage-Mode');
+      if (overage !== null && overage !== 'block') {
+        unsafeAllowance = true;
+        throw new Error('Hirebase allowance safety changed during collection');
+      }
+      if (
+        integer(envelope.page) !== page ||
+        integer(envelope.limit) !== limit ||
+        integer(envelope.total_pages) !== Math.ceil(integer(envelope.total_count) / limit)
+      ) {
+        throw new Error('Hirebase returned inconsistent pagination');
+      }
+      const jobs = rawJobs.map(normalizeHirebase);
+      if (new Set(jobs.map((job) => job.sourceJobId)).size !== jobs.length) {
+        throw new Error('Hirebase page contains duplicate identities');
+      }
+      state.result.retained += await options.onJobs(jobs);
+      state.offset += rawJobs.length;
+      state.calls += 1;
+      if (rawJobs.length < limit || page >= integer(envelope.total_pages)) {
+        state.done = true;
+        state.result.complete = true;
+      }
+    } catch (error) {
+      if (error instanceof ProviderError && error.definitelyUnbilled) {
+        charged = 0;
+      }
+      state.result.status = state.result.fetched ? 'partial' : 'failed';
+      state.result.message =
+        error instanceof ProviderError
+          ? error.message
+          : 'Hirebase response or persistence could not be verified';
+      state.done = true;
+      if (unsafeAllowance) {
         stop = true;
-        break;
+        state.result.message = 'Hirebase allowance safety changed; all metered searches stopped';
       }
-      if (state.calls >= (options.maxPagesPerSearch ?? 500)) {
-        state.done = true;
-        state.result.status = 'partial';
-        state.result.message = 'Hirebase search reached the page safety limit';
-        continue;
+      // Unknown execution may have spent the full reservation; do not replay or spend its share elsewhere.
+      if (charged === null) {
+        result.uncertain += limit;
+        stop = true;
       }
-      const share =
-        Math.floor(roundBudget / active.length) + (index < roundBudget % active.length ? 1 : 0);
-      const limit = alignedPageSize(state.offset, Math.min(share, available));
-      if (!limit) {
-        continue;
+      if (error instanceof ProviderError && [401, 403, 429].includes(error.status ?? 0)) {
+        stop = true;
       }
-      const page = state.offset / limit + 1;
-      const reservation = await ledger.reserve(limit, state.search.id);
-      available -= limit;
-      result.reserved += limit;
-      let charged: number | null = null;
-      try {
-        const response = await http.request('https://api.hirebase.org/v2/jobs/search', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-api-key': key },
-          body: JSON.stringify({ ...requestFilters(state.search), limit, page }),
-        });
-        const envelope = record(response.data);
-        const rawJobs = array(envelope.jobs);
-        if (rawJobs.length > limit) {
-          throw new Error('Hirebase returned more records than requested');
-        }
-        charged = rawJobs.length;
-        result.returned += charged;
-        state.result.fetched += charged;
-        const reportedRemaining = response.headers.get('Hirebase-Usage-Included-Remaining');
-        result.providerRemaining = Math.max(0, result.providerRemaining - charged);
-        if (reportedRemaining !== null) {
-          result.providerRemaining = Math.min(
-            result.providerRemaining,
-            integer(Number(reportedRemaining))
-          );
-        }
-        const overage = response.headers.get('Hirebase-Usage-Overage-Mode');
-        if (overage !== null && overage !== 'block') {
-          throw new Error('Hirebase allowance safety changed during collection');
-        }
-        if (
-          integer(envelope.page) !== page ||
-          integer(envelope.limit) !== limit ||
-          integer(envelope.total_pages) !== Math.ceil(integer(envelope.total_count) / limit)
-        ) {
-          throw new Error('Hirebase returned inconsistent pagination');
-        }
-        const jobs = rawJobs.map(normalizeHirebase);
-        if (new Set(jobs.map((job) => job.sourceJobId)).size !== jobs.length) {
-          throw new Error('Hirebase page contains duplicate identities');
-        }
-        state.result.retained += await options.onJobs(jobs);
-        state.offset += rawJobs.length;
-        state.calls += 1;
-        if (rawJobs.length < limit || page >= integer(envelope.total_pages)) {
-          state.done = true;
-          state.result.complete = true;
-        }
-      } catch (error) {
-        if (error instanceof ProviderError && error.definitelyUnbilled) {
-          charged = 0;
-        }
-        state.result.status = state.result.fetched ? 'partial' : 'failed';
-        state.result.message =
-          error instanceof ProviderError
-            ? error.message
-            : 'Hirebase response or persistence could not be verified';
-        state.done = true;
-        // Unknown execution may have spent the full reservation; do not replay or spend its share elsewhere.
-        if (charged === null) {
-          result.uncertain += limit;
-          stop = true;
-        }
-        if (error instanceof ProviderError && [401, 403, 429].includes(error.status ?? 0)) {
-          stop = true;
-        }
-      } finally {
-        await ledger.settle(reservation, charged);
-      }
-      if (charged !== null) {
-        available += limit - charged;
-      }
-      available = Math.max(0, Math.min(available, result.providerRemaining));
-      if (stop) {
-        break;
-      }
+    } finally {
+      await ledger.settle(reservation, charged);
+    }
+    if (charged !== null) {
+      available += limit - charged;
+    }
+    available = Math.max(0, Math.min(available, result.providerRemaining));
+    if (stop) {
+      break;
     }
   }
   for (const state of states) {

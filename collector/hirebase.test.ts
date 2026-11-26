@@ -7,6 +7,7 @@ import {
   type UsageLedger,
 } from './hirebase';
 import { ProviderHttp } from './http';
+import { matchedSearchIds } from './matching';
 import type { SavedSearch } from './types';
 
 const job = (id = 'fixture') => ({
@@ -208,6 +209,80 @@ test('keeps allocations fair and offsets unique across small and full invocation
     expect(new Set(seen).size).toBe(budget);
     expect(Math.max(...counts) - Math.min(...counts)).toBeLessThanOrEqual(1);
   }
+});
+
+test('redistributes unevenly exhausted searches toward cumulative under-allocation', async () => {
+  const fake = pagedHttp({ a: 1000, b: 1000, c: 22, d: 49 });
+  const result = await collectHirebase({
+    ...fake,
+    key: 'key',
+    searches: ['a', 'b', 'c', 'd'].map((id) => ({ ...search(id), titlePhrases: [id] })),
+    budget: 200,
+    usage,
+    ledger: ledger(),
+    onJobs: async () => 0,
+  });
+  const counts = result.sources.map((source) => source.fetched);
+  expect(counts.slice(2)).toEqual([22, 49]);
+  expect(counts[0] + counts[1]).toBe(129);
+  expect(Math.abs(counts[0] - counts[1])).toBeLessThanOrEqual(1);
+});
+
+test('an unsafe billing response globally stops remaining metered searches', async () => {
+  const fetcher = jest.fn().mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        jobs: [job('billed')],
+        page: 1,
+        limit: 1,
+        total_count: 1,
+        total_pages: 1,
+      }),
+      { headers: { 'Hirebase-Usage-Overage-Mode': 'meter' } }
+    )
+  );
+  const state = ledger();
+  const onJobs = jest.fn();
+  const result = await collectHirebase({
+    http: new ProviderHttp({ fetch: fetcher }),
+    key: 'key',
+    searches: [search('one'), search('two')],
+    budget: 2,
+    usage,
+    ledger: state,
+    onJobs,
+  });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(state.used).toBe(1);
+  expect(result.returned).toBe(1);
+  expect(result.sources.map((source) => source.status)).toEqual(['partial', 'partial']);
+  expect(onJobs).not.toHaveBeenCalled();
+});
+
+test('preserves raw reported location text even with empty or normalized locations', () => {
+  const foreign = normalizeHirebase({
+    ...job('foreign'),
+    location_raw: 'Berlin, Germany',
+    locations: [],
+  });
+  expect(foreign.locations).toEqual([
+    { text: 'Berlin, Germany', city: null, region: null, country: null },
+  ]);
+  expect(matchedSearchIds(foreign, [{ ...search('canada'), allowUnknownLocation: true }])).toEqual(
+    []
+  );
+  expect(matchedSearchIds(foreign, [{ ...search('berlin'), locationPhrases: ['Berlin'] }])).toEqual(
+    ['berlin']
+  );
+  const reported = normalizeHirebase({
+    ...job('reported'),
+    location_raw: 'Remote within Canada',
+    locations: [{ country: 'Canada', address: 'Toronto, Ontario' }],
+  });
+  expect(reported.locations.map((entry) => entry.text)).toEqual([
+    'Toronto, Ontario',
+    'Remote within Canada',
+  ]);
 });
 
 test('caps at provider remaining/local monthly usage and does not call with zero budget', async () => {
