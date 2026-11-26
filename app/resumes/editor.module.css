@@ -8,41 +8,9 @@
 .frame {
   box-sizing: border-box;
   width: 100%;
-  max-width: var(--kyu-editor-frame);
+  max-width: var(--kyu-frame);
   margin-inline: auto;
   padding-inline: var(--kyu-gutter);
-}
-
-.globalHeader {
-  display: flex;
-  align-items: center;
-  gap: var(--kyu-space-12);
-  min-height: var(--kyu-header-height);
-  border-bottom: var(--kyu-stroke) solid var(--kyu-border);
-}
-
-.wordmark {
-  font-size: 1.5rem;
-  font-weight: var(--kyu-weight-semibold);
-  letter-spacing: -0.06em;
-}
-
-.wordmark span {
-  color: var(--kyu-accent);
-}
-
-.navigation a {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--kyu-hit-min);
-  color: var(--kyu-ink);
-  font-size: var(--kyu-type-small);
-  font-weight: var(--kyu-weight-medium);
-  text-decoration: none;
-}
-
-.navigation a:hover {
-  color: var(--kyu-accent);
 }
 
 .main {
@@ -505,10 +473,6 @@
 @media (max-width: 40.625rem) {
   .frame {
     padding-inline: 1.375rem;
-  }
-
-  .globalHeader {
-    gap: var(--kyu-space-6);
   }
 
   .main {

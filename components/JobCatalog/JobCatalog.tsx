@@ -1,6 +1,7 @@
 import type { Compensation, Provider, RunReport } from '../../collector/types';
 import { catalogHref } from '../../jobs/filters';
 import type { CatalogJob, CatalogResult } from '../../jobs/types';
+import { SiteHeader } from '../SiteHeader/SiteHeader';
 import classes from './JobCatalog.module.css';
 
 const providerNames: Record<Provider, string> = {
@@ -386,19 +387,8 @@ export function JobCatalog({ result }: { result: CatalogResult }) {
   return (
     <div className={classes.catalog}>
       <div className={classes.frame}>
-        <header className={classes.header}>
-          <span className={classes.brand}>
-            Kyu<span>.</span>
-          </span>
-          <nav aria-label="Primary">
-            <a href="/jobs" aria-current="page">
-              Discover
-            </a>
-          </nav>
-          <span className={classes.instance}>Private instance · Read-only catalog</span>
-        </header>
-        <main className={classes.main}>
-          <h1>Your next move.</h1>
+        <SiteHeader activePage="jobs" />
+        <main className={classes.main} aria-label="Job catalog">
           <form
             method="get"
             action="/jobs"

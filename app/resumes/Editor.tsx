@@ -9,6 +9,7 @@ import {
   type RefObject,
 } from 'react';
 import { Menu, Modal } from '@mantine/core';
+import { SiteHeader } from '../../components/SiteHeader/SiteHeader';
 import { createDocument, deleteDocument, loadDocument, loadLibrary, saveDocument } from './actions';
 import { Autosave } from './autosave';
 import { fileName } from './markdown';
@@ -499,16 +500,7 @@ export function Editor({ initialLibrary, initialDocument, initialError }: Editor
   return (
     <div className={styles.editor}>
       <div className={styles.frame}>
-        <header className={styles.globalHeader}>
-          <div className={styles.wordmark}>
-            kyu<span>.</span>
-          </div>
-          <nav className={styles.navigation} aria-label="Main navigation">
-            <a href="/resumes" aria-current="page">
-              Resumes
-            </a>
-          </nav>
-        </header>
+        <SiteHeader activePage="resumes" />
         <main className={styles.main}>
           {availabilityError && (
             <div className={styles.errorBox} role="alert">
