@@ -29,8 +29,7 @@ type BoardResult = {
   message: string | null;
 };
 
-// Neither public list endpoint documents pagination. Fail closed on new envelopes,
-// including continuation fields, rather than mistaking one page for a full board.
+// Complete-snapshot contract: see collector/SPEC.md.
 function envelope(data: Data, keys: string[]): void {
   if (Object.keys(data).some((key) => !keys.includes(key))) {
     throw new Error('Provider returned an unsupported board response envelope');
@@ -112,8 +111,7 @@ function ashbyId(data: Data, canonicalUrl: string): string {
   if (data.id != null) {
     return jobId(data.id);
   }
-  // The official sample omits id. Only the exact same-board hosted path is a
-  // stable fallback; never derive identity from titles, apply URLs or other hosts.
+  // Source-identity fallback: see collector/SPEC.md.
   const prefix = `${canonicalUrl}/`;
   const url = requiredText(data.jobUrl);
   if (!url.startsWith(prefix)) {
@@ -260,8 +258,6 @@ function greenhouseCompensation(value: unknown): Compensation[] {
     return {
       min: min === null ? null : min / 100,
       max: max === null ? null : max / 100,
-      // The public Job Board documentation uses currency_type; some boards
-      // report currency_code. Both are explicit currency facts, never inferred.
       currency: optionalText(range.currency_type) ?? optionalText(range.currency_code),
       period: null,
       kind: optionalText(range.title),
@@ -334,8 +330,6 @@ export async function collectBoard(
   }
   uniqueIds(items, (item) => item.id);
   let detailFailed = false;
-  // Public-board detail sweeps stay at most two-wide, even when the shared
-  // HTTP worker pool permits four concurrent tasks for other providers.
   const jobs = await mapBounded(items.slice(0, limit), Math.min(concurrency, 2), async (item) => {
     try {
       const { data: response } = await http.request(`${endpoint}/${item.id}?pay_transparency=true`);

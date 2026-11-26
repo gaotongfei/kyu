@@ -76,8 +76,7 @@ function safeMessage(message: string | null): string | null {
     .slice(0, 500);
 }
 
-// Explicit projections keep accidental extra properties (including provider responses/keys)
-// out of the configuration and report JSON columns.
+// Persisted JSON boundary: see db/SPEC.md.
 function boardSnapshot(board: Board): Board {
   return {
     provider: board.provider,
@@ -150,8 +149,7 @@ async function clearJob(tx: Transaction, source: string, sourceJobId: string): P
 }
 
 async function lockSource(tx: Transaction, source: string): Promise<void> {
-  // Serialize purge with ingestion even for an identity not yet present in either table.
-  // This is NOT the run lock, and is released at each independent source commit.
+  // Purge/ingestion serialization: see collector/SPEC.md.
   await tx.execute(
     sql`select pg_advisory_xact_lock(${SOURCE_LOCK_NAMESPACE}::integer, hashtext(${source}))`
   );

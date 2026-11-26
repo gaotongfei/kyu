@@ -35,8 +35,7 @@ export function boardUrl(provider: BoardProvider, slug: string): string {
   return `https://${host}/${slug}`;
 }
 
-// JSON.parse alone silently accepts duplicate object keys, including escaped equivalents.
-// First validate JSON syntax, then scan keys with bounded nesting before using the parsed value.
+// Untrusted-input contract: see collector/SPEC.md.
 function parseJson(text: string, label: string): unknown {
   if (typeof text !== 'string' || Buffer.byteLength(text, 'utf8') > MAX_JSON_BYTES) {
     invalid(label, 'JSON exceeds the 1 MiB limit');

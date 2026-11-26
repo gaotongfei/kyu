@@ -1,4 +1,4 @@
-import { drizzle } from 'drizzle-orm/postgres-js';
+import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
 
@@ -15,5 +15,5 @@ export function connectDatabase(databaseUrl: string) {
   return { client, db: databaseFromClient(client) };
 }
 
-export type Database = ReturnType<typeof databaseFromClient>;
+export type Database = PostgresJsDatabase<typeof schema>;
 export type DatabaseClient = ReturnType<typeof postgres>;
