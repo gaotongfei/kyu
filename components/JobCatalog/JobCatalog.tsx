@@ -9,7 +9,7 @@ const providerNames: Record<Provider, string> = {
   hirebase: 'Hirebase',
 };
 
-function ObservationDate({ value }: { value: string | null }) {
+function ObservationDate({ value, compact = false }: { value: string | null; compact?: boolean }) {
   const date = value ? new Date(value) : null;
   if (!date || !Number.isFinite(date.getTime())) {
     return <>Not reported</>;
@@ -17,8 +17,9 @@ function ObservationDate({ value }: { value: string | null }) {
   return (
     <time dateTime={date.toISOString()}>
       {new Intl.DateTimeFormat('en', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
+        ...(compact
+          ? { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }
+          : { dateStyle: 'medium', timeStyle: 'short' }),
         timeZone: 'UTC',
       }).format(date)}{' '}
       UTC
@@ -57,72 +58,135 @@ function externalHref(value: string | null): string | undefined {
   }
 }
 
+type CollectionStatus = RunReport['status'] | 'skipped';
+
+const statusLabels: Record<RunReport['status'], string> = {
+  success: 'Refresh complete',
+  partial: 'Partial refresh',
+  failed: 'Refresh failed',
+  running: 'Refreshing',
+  interrupted: 'Refresh interrupted',
+};
+
+const statusPaths: Record<CollectionStatus, string> = {
+  success: 'm5 12 4 4L19 6',
+  failed: 'm6 6 12 12M18 6 6 18',
+  partial: 'M12 3 2.5 20h19ZM12 9v4m0 3v.01',
+  interrupted: 'M8 5v14M16 5v14',
+  running: 'M21 12a9 9 0 1 1-9-9',
+  skipped: 'M5 12h14',
+};
+
+function CollectionIcon({ status }: { status: CollectionStatus }) {
+  return (
+    <svg
+      className={classes.statusIcon}
+      data-status={status}
+      aria-hidden="true"
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d={statusPaths[status]} />
+    </svg>
+  );
+}
+
 function CollectionReport({ report }: { report: RunReport | null }) {
   if (!report) {
-    return (
-      <p className={classes.metadata}>
-        No collection run has been recorded. Collection runs only when invoked manually.
-      </p>
-    );
+    return <p className={`${classes.metadata} ${classes.noRun}`}>Not collected yet.</p>;
   }
-  const hasStaleSources = report.sources.some(
-    (source) => source.status !== 'success' || (!source.complete && source.provider !== 'hirebase')
-  );
   const hasHirebase = report.sources.some((source) => source.provider === 'hirebase');
   return (
-    <aside className={classes.report} aria-labelledby="collection-heading">
-      <h2 id="collection-heading">Latest collection: {report.status}</h2>
-      <p className={classes.metadata}>
-        Started <ObservationDate value={report.startedAt} /> ·{' '}
-        {report.finishedAt ? (
-          <>
-            Finished <ObservationDate value={report.finishedAt} />
-          </>
-        ) : (
-          'Not finished'
-        )}
-      </p>
-      {report.status === 'running' && (
-        <p>Collection is in progress. Displayed observations may come from earlier runs.</p>
-      )}
-      {report.status === 'interrupted' && (
-        <p>Collection was interrupted; not all sources were refreshed.</p>
-      )}
-      {hasStaleSources && (
-        <p>
-          Failed, partial or skipped refreshes do not close unseen jobs; older observations may be
-          stale. They do not establish that a listing is inactive.
-        </p>
-      )}
-      <ul className={classes.sourceReports}>
-        {report.sources.map((source) => (
-          <li key={`${source.provider}:${source.source}`}>
-            <span className={classes.sourceOutcome}>
-              {providerNames[source.provider]} · {source.source} · {source.status}
-              {source.provider === 'hirebase' && source.status === 'success' && !source.complete
-                ? ' · Limited sample (not exhaustive)'
-                : !source.complete
-                  ? ' · Incomplete source coverage'
-                  : ' · Complete source refresh'}
-            </span>
-            <span className={classes.metadata}>
-              {' '}
-              · {source.fetched} fetched · {source.retained} retained · {source.deactivated}{' '}
-              deactivated
-            </span>
-            {source.message && <p className={classes.sourceMessage}>{source.message}</p>}
-          </li>
-        ))}
-      </ul>
-      {hasHirebase && (
-        <p className={classes.metadata}>
-          Hirebase searches are intentionally limited by the invocation budget and provider/local
-          monthly caps, not a full feed. Budget: {report.hirebase.requestedBudget} requested ·{' '}
-          {report.hirebase.reserved} reserved · {report.hirebase.returned} returned ·{' '}
-          {report.hirebase.uncertain} uncertain · provider remaining:{' '}
-          {report.hirebase.providerRemaining ?? 'not reported'} · period: {report.hirebase.period}.
-        </p>
-      )}
+    <aside className={classes.report} aria-label="Collection status">
+      <details>
+        <summary className={classes.reportSummary}>
+          <span className={classes.reportLabel}>
+            <CollectionIcon status={report.status} />
+            {statusLabels[report.status]}
+          </span>
+          <span className={classes.reportDate}>
+            <ObservationDate value={report.finishedAt ?? report.startedAt} compact />
+          </span>
+          <span className={classes.reportToggle}>
+            Details
+            <svg
+              aria-hidden="true"
+              width="12"
+              height="12"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
+              <path d="m4 6 4 4 4-4" />
+            </svg>
+          </span>
+        </summary>
+        <div className={classes.reportDetails}>
+          <ul className={classes.sourceReports}>
+            {report.sources.map((source) => (
+              <li key={`${source.provider}:${source.source}`}>
+                <div className={classes.sourceHeading}>
+                  <CollectionIcon status={source.status} />
+                  <span className={classes.sourceOutcome}>
+                    {providerNames[source.provider]} · {source.source}
+                  </span>
+                  <span className={classes.metadata}>
+                    {source.status} ·{' '}
+                    {source.complete
+                      ? 'Complete'
+                      : source.provider === 'hirebase' && source.status === 'success'
+                        ? 'Limited sample'
+                        : 'Incomplete'}
+                  </span>
+                </div>
+                <p className={classes.metadata}>
+                  {source.fetched} fetched · {source.retained} retained · {source.deactivated}{' '}
+                  deactivated
+                </p>
+                {source.message && <p className={classes.sourceMessage}>{source.message}</p>}
+              </li>
+            ))}
+          </ul>
+          {hasHirebase && (
+            <dl className={classes.budget} aria-label="Hirebase usage">
+              {[
+                ['Requested', report.hirebase.requestedBudget],
+                ['Reserved', report.hirebase.reserved],
+                ['Returned', report.hirebase.returned],
+                ['Uncertain', report.hirebase.uncertain],
+                ['Provider remaining', report.hirebase.providerRemaining ?? 'Not reported'],
+                ['UTC month', report.hirebase.period],
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>{value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+          <dl className={classes.runDates}>
+            <div>
+              <dt>Started</dt>
+              <dd>
+                <ObservationDate value={report.startedAt} />
+              </dd>
+            </div>
+            <div>
+              <dt>Finished</dt>
+              <dd>
+                {report.finishedAt ? <ObservationDate value={report.finishedAt} /> : 'Not finished'}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </details>
     </aside>
   );
 }
@@ -335,15 +399,11 @@ export function JobCatalog({ result }: { result: CatalogResult }) {
         </header>
         <main className={classes.main}>
           <h1>Your next move.</h1>
-          <p className={classes.intro}>
-            Roles collected from the searches and employer boards you choose.
-          </p>
           <form
             method="get"
             action="/jobs"
             className={classes.filters}
             aria-label="Filter collected jobs"
-            aria-describedby="filter-help"
           >
             <div className={classes.field}>
               <label htmlFor="catalog-query">Role or company</label>
@@ -375,10 +435,6 @@ export function JobCatalog({ result }: { result: CatalogResult }) {
               </a>
             </div>
           </form>
-          <p id="filter-help" className={classes.filterHelp}>
-            Filters search only collected jobs. Opening or filtering this page never contacts
-            providers.
-          </p>
           {result.kind === 'unavailable' ? (
             <section role="alert" className={classes.unavailable}>
               <h2>Catalog unavailable</h2>
@@ -387,7 +443,6 @@ export function JobCatalog({ result }: { result: CatalogResult }) {
                   ? 'Configure the local database connection, then apply the documented database migrations.'
                   : 'Check that the local database is reachable and its migrations have been applied.'}
               </p>
-              <p>No provider request was made.</p>
             </section>
           ) : (
             <>
@@ -424,13 +479,12 @@ export function JobCatalog({ result }: { result: CatalogResult }) {
                     </h3>
                     {filtered ? (
                       <p>
-                        <a href={clearHref}>Clear filters</a> to view the collected catalog.
+                        <a href={clearHref}>Clear filters</a>
                       </p>
                     ) : (
                       <p>
                         Enable saved searches and employer boards in the local configuration, then
                         run <code>yarn collect --hirebase-budget 0</code> for enabled boards.
-                        Collection runs only when invoked manually.
                       </p>
                     )}
                   </div>
@@ -456,10 +510,6 @@ export function JobCatalog({ result }: { result: CatalogResult }) {
                       <span aria-disabled="true">Next page</span>
                     )}
                   </nav>
-                  <p className={classes.catalogNote}>
-                    Private, read-only catalog. Collection runs only when invoked manually. Source
-                    identities are kept separate.
-                  </p>
                 </footer>
               </section>
             </>

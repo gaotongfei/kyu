@@ -124,7 +124,7 @@ function fixtureReport(): RunReport {
 }
 
 function disclosure(container: HTMLElement): HTMLElement {
-  return container.querySelector('summary')!;
+  return container.querySelector('section[aria-labelledby="catalog-heading"] summary')!;
 }
 
 function openDetails(container: HTMLElement): HTMLElement {
@@ -167,9 +167,10 @@ describe('JobCatalog', () => {
       'href',
       '/jobs?inactive=1'
     );
-    expect(
-      screen.getByText(/Opening or filtering this page never contacts providers/)
-    ).toBeInTheDocument();
+    expect(form).not.toHaveAttribute('aria-describedby');
+    expect(screen.queryByText(/Opening or filtering this page/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Roles collected from the searches/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Private, read-only catalog\./)).not.toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: '1 matching job · Active listings' })
     ).toBeInTheDocument();
@@ -381,44 +382,98 @@ describe('JobCatalog', () => {
     ).toBeInTheDocument();
   });
 
-  it('reports truthful partial, failed and skipped source outcomes and persisted safe messages', () => {
-    render(<JobCatalog result={fixtureCatalog({ lastRun: fixtureReport() })} />);
-    const report = screen.getByRole('complementary', { name: 'Latest collection: partial' });
-    expect(report).toHaveTextContent(
-      'Ashby · ashby:fixture-board · success · Complete source refresh'
+  it('collapses diagnostic facts behind one accessible status, preserving all source outcomes on demand', () => {
+    const { container } = render(
+      <JobCatalog result={fixtureCatalog({ lastRun: fixtureReport() })} />
     );
-    expect(report).toHaveTextContent(
-      'Greenhouse · greenhouse:fixture-failed · failed · Incomplete source coverage'
+    const notice = screen.getByRole('complementary', { name: 'Collection status' });
+    const details = notice.querySelector('details')!;
+    const summary = details.querySelector('summary')!;
+    expect(details).not.toHaveAttribute('open');
+    expect(summary).toHaveTextContent('Partial refresh');
+    expect(summary).toHaveTextContent('Nov 24, 12:01 PM UTC');
+    expect(summary).toHaveTextContent('Details');
+    expect(summary.querySelector('svg[data-status="partial"]')).toHaveAttribute(
+      'aria-hidden',
+      'true'
     );
-    expect(report).toHaveTextContent(
-      'Greenhouse · greenhouse:fixture-partial · partial · Incomplete source coverage'
+    expect(summary.querySelector('a, button, input')).toBeNull();
+    expect(within(notice).getByRole('list')).not.toBeVisible();
+    expect(
+      within(notice).getByText('Board could not be refreshed; prior observations retained.')
+    ).not.toBeVisible();
+    expect(notice).not.toHaveTextContent(/do not close unseen jobs|not a full feed/);
+
+    fireEvent.click(summary);
+    expect(details).toHaveAttribute('open');
+    const sources = within(notice).getAllByRole('listitem');
+    expect(sources).toHaveLength(4);
+    expect(sources[0]).toHaveTextContent('Ashby · ashby:fixture-board');
+    expect(sources[0]).toHaveTextContent('success · Complete');
+    expect(sources[0]).toHaveTextContent('3 fetched · 2 retained · 1 deactivated');
+    expect(sources[1]).toHaveTextContent('Greenhouse · greenhouse:fixture-failed');
+    expect(sources[1]).toHaveTextContent('failed · Incomplete');
+    expect(sources[2]).toHaveTextContent('partial · Incomplete');
+    expect(sources[3]).toHaveTextContent('Hirebase · hirebase:fixture-skipped');
+    expect(sources[3]).toHaveTextContent('skipped · Incomplete');
+    for (const message of [
+      'Board could not be refreshed; prior observations retained.',
+      'Some job details could not be validated.',
+      'Hirebase key not configured; no requests made.',
+    ]) {
+      expect(within(notice).getByText(message)).toBeVisible();
+    }
+    expect(notice.querySelector('time[datetime="2026-11-24T12:00:00.000Z"]')).not.toBeNull();
+    expect(notice.querySelector('time[datetime="2026-11-24T12:01:00.000Z"]')).not.toBeNull();
+    const usage = notice.querySelector<HTMLElement>('dl[aria-label="Hirebase usage"]')!;
+    expect(within(usage).getByText('Provider remaining').nextElementSibling).toHaveTextContent(
+      'Not reported'
     );
-    expect(report).toHaveTextContent('Hirebase · hirebase:fixture-skipped · skipped');
-    expect(report).toHaveTextContent('Board could not be refreshed; prior observations retained.');
-    expect(report).toHaveTextContent('Some job details could not be validated.');
-    expect(report).toHaveTextContent('Hirebase key not configured; no requests made.');
-    expect(report).toHaveTextContent('do not close unseen jobs');
-    expect(report).toHaveTextContent('3 fetched · 2 retained · 1 deactivated');
+    expect(within(usage).getByText('UTC month').nextElementSibling).toHaveTextContent('2026-11');
+    expect(disclosure(container)).toHaveTextContent('Fixture engineer');
+    expect(disclosure(container).parentElement).not.toHaveAttribute('open');
+    fireEvent.click(summary);
+    expect(details).not.toHaveAttribute('open');
   });
 
   it.each([
-    ['running', 'Collection is in progress.', 'Not finished'],
-    ['failed', 'Failed, partial or skipped refreshes', 'Finished'],
-    ['interrupted', 'Collection was interrupted', 'Finished'],
-  ] as const)(
-    'exposes a %s collection without pretending it completed',
-    (status, message, timing) => {
-      const report = fixtureReport();
-      report.status = status;
-      report.finishedAt = status === 'running' ? null : report.finishedAt;
-      render(<JobCatalog result={fixtureCatalog({ lastRun: report })} />);
-      const notice = screen.getByRole('complementary', { name: `Latest collection: ${status}` });
-      expect(notice).toHaveTextContent(message);
-      expect(notice).toHaveTextContent(timing);
-    }
-  );
+    ['running', 'Refreshing'],
+    ['failed', 'Refresh failed'],
+    ['interrupted', 'Refresh interrupted'],
+    ['success', 'Refresh complete'],
+  ] as const)('pairs a distinct %s symbol with a readable status label', (status, label) => {
+    const report = fixtureReport();
+    report.status = status;
+    report.finishedAt = status === 'running' ? null : report.finishedAt;
+    render(<JobCatalog result={fixtureCatalog({ lastRun: report })} />);
+    const notice = screen.getByRole('complementary', { name: 'Collection status' });
+    const summary = notice.querySelector('summary')!;
+    expect(summary).toHaveTextContent(label);
+    expect(summary.querySelector(`svg[data-status="${status}"]`)).toHaveAttribute(
+      'aria-hidden',
+      'true'
+    );
+    expect(notice.querySelector('details')).not.toHaveAttribute('open');
+    fireEvent.click(summary);
+    expect(within(notice).getByText('Finished').nextElementSibling).toHaveTextContent(
+      status === 'running' ? 'Not finished' : 'Nov 24, 2026, 12:01 PM UTC'
+    );
+  });
 
-  it('distinguishes successful, intentionally bounded Hirebase samples from failed or partial refreshes', () => {
+  it('distinguishes every run state by symbol, not color alone', () => {
+    const report = fixtureReport();
+    const { rerender } = render(<JobCatalog result={fixtureCatalog({ lastRun: report })} />);
+    const shapes = new Set<string | null>();
+    for (const status of ['success', 'partial', 'failed', 'running', 'interrupted'] as const) {
+      rerender(<JobCatalog result={fixtureCatalog({ lastRun: { ...report, status } })} />);
+      const notice = screen.getByRole('complementary', { name: 'Collection status' });
+      shapes.add(notice.querySelector('summary svg path')!.getAttribute('d'));
+    }
+    expect(shapes.size).toBe(5);
+    expect(shapes.has(null)).toBe(false);
+  });
+
+  it('preserves bounded Hirebase coverage and every quota fact without a permanent explanation', () => {
     const report = fixtureReport();
     report.status = 'success';
     report.sources = [
@@ -435,18 +490,23 @@ describe('JobCatalog', () => {
     ];
     report.hirebase = { ...report.hirebase, reserved: 2, returned: 2, providerRemaining: 498 };
     render(<JobCatalog result={fixtureCatalog({ lastRun: report })} />);
-    const notice = screen.getByRole('complementary', { name: 'Latest collection: success' });
-    expect(notice).toHaveTextContent(
-      'Hirebase · hirebase:fixture-search · success · Limited sample (not exhaustive)'
-    );
-    expect(notice).toHaveTextContent(
-      'invocation budget and provider/local monthly caps, not a full feed'
-    );
-    expect(notice).toHaveTextContent(
-      '2 requested · 2 reserved · 2 returned · 0 uncertain · provider remaining: 498'
-    );
-    expect(notice).not.toHaveTextContent('Incomplete source coverage');
-    expect(notice).not.toHaveTextContent('Failed, partial or skipped refreshes');
+    const notice = screen.getByRole('complementary', { name: 'Collection status' });
+    expect(notice.querySelector('summary')).toHaveTextContent('Refresh complete');
+    expect(within(notice).getByText('success · Limited sample')).not.toBeVisible();
+    fireEvent.click(notice.querySelector('summary')!);
+    expect(within(notice).getByText('success · Limited sample')).toBeVisible();
+    expect(notice).not.toHaveTextContent(/Incomplete|not a full feed/);
+    const usage = notice.querySelector<HTMLElement>('dl[aria-label="Hirebase usage"]')!;
+    for (const [label, value] of Object.entries({
+      Requested: '2',
+      Reserved: '2',
+      Returned: '2',
+      Uncertain: '0',
+      'Provider remaining': '498',
+      'UTC month': '2026-11',
+    })) {
+      expect(within(usage).getByText(label).nextElementSibling).toHaveTextContent(value);
+    }
   });
 
   it('shows an honest no-data state with manual configuration/CLI guidance and no sample rows', () => {
@@ -455,7 +515,7 @@ describe('JobCatalog', () => {
     expect(screen.getByText(/Enable saved searches and employer boards/)).toHaveTextContent(
       'yarn collect --hirebase-budget 0'
     );
-    expect(screen.getByText(/No collection run has been recorded/)).toBeInTheDocument();
+    expect(screen.getByText('Not collected yet.')).toBeInTheDocument();
     expect(container.querySelector('details')).toBeNull();
     expect(screen.getByText('Showing 0–0 of 0 · Page 1 of 1')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Next page' })).not.toBeInTheDocument();
@@ -504,7 +564,7 @@ describe('JobCatalog', () => {
           : 'Check that the local database is reachable'
       );
       expect(alert).toHaveTextContent('migrations');
-      expect(alert).toHaveTextContent('No provider request was made.');
+      expect(alert).not.toHaveTextContent('No provider request was made.');
       expect(alert).not.toHaveTextContent(/password|postgres:\/\/|stack|credential/i);
       expect(container.querySelector('details')).toBeNull();
       expect(screen.queryByRole('heading', { name: /No collected jobs/ })).not.toBeInTheDocument();

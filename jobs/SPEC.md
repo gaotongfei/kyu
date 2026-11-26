@@ -24,6 +24,8 @@ No accounts, fit scores, saving, swipe interactions, AI preparation, application
 
 ## Failure and access states
 
-No run, unfinished/interrupted runs, failed/partial/skipped sources, intentional budget limits, missing database configuration, database errors, empty catalog and filtered-empty results have distinct truthful messages. Database errors do not expose SQL or credentials. A production build needs neither a database connection nor a provider key; reads occur dynamically at request time.
+Collection freshness is a compact icon, short status and timestamp, not a permanently expanded operator report. The partial state only flags potential stale observations; per-job stale warnings remain visible. A default-collapsed native Details disclosure exposes factual source outcomes, coverage, safe failure messages, exact dates and Hirebase usage without explanatory paragraphs. Status names accompany distinct symbols so color is never the only cue; running animation respects reduced motion. Routine subtitle/filter/footer narration is omitted.
+
+No run, unfinished/interrupted runs, failed/partial/skipped sources, intentional budget limits, missing database configuration, database errors, empty catalog and filtered-empty results remain distinguishable. Keep actionable setup, error and recovery guidance; database errors do not expose SQL or credentials. A production build needs neither a database connection nor a provider key; reads occur dynamically at request time.
 
 Visible keyboard focus, native filter labels/GET semantics, browser zoom, 320px wrapping, essential mobile metadata, 44px coarse-pointer controls and reduced motion are preserved. Loading is a quiet text status with no fabricated listings. Automated component tests use explicit fixtures; real-browser QA used a separate disposable database with clearly labeled fixture content, not production seed jobs.
