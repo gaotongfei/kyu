@@ -6,8 +6,3 @@
 - Avoid routine explanatory copy, implementation narration, and self-evident helper paragraphs. For example, do not explain that the preview is live, when PDFs are generated, or that Markdown is saved as written.
 - Keep actionable validation, import limitations, destructive-action warnings, and error/recovery guidance.
 - Prefer visual cue over explantory copy. For example: instead of having a copy saying "loading" or "saving", display the spinning icon; instead of saying "completed", use green check mark icon; instead of saying "failed", use red cross icon etc.
-
-## Reviews and commits
-
-- Leave changes uncommitted for the user to review. Commit only after explicit approval.
-- Do not push, deploy, or open a pull request unless requested.
