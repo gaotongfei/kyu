@@ -8,7 +8,11 @@ type Snapshot = {
   error: string | null;
 };
 
-/** One queue per open document. Acknowledged versions, never optimistic versions, own writes. */
+/**
+ * Each instance manages autosaving for one open document, with one write at a time.
+ * Edits are coalesced into the latest snapshot, not queued individually.
+ * Each write uses the last acknowledged version, never an optimistic version.
+ */
 export class Autosave {
   private snapshot: Snapshot;
   private revision = 0;
