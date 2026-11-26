@@ -1,0 +1,93 @@
+[
+  {
+    "provider": "ashby",
+    "slug": "ashby",
+    "company": "Ashby",
+    "boardUrl": "https://jobs.ashbyhq.com/ashby",
+    "enabled": false,
+    "provenance": {
+      "url": "https://github.com/fyrosofttech/lastroundai-hiring-data/blob/2816bfadd65b7bbec23701dd036bcc7496c729db/ats-directory/lastroundai-ats-company-directory-2026-08.csv",
+      "commit": "2816bfadd65b7bbec23701dd036bcc7496c729db",
+      "lastCrawled": "2026-07-12",
+      "license": "CC BY 4.0"
+    }
+  },
+  {
+    "provider": "ashby",
+    "slug": "linear",
+    "company": "Linear",
+    "boardUrl": "https://jobs.ashbyhq.com/linear",
+    "enabled": false,
+    "provenance": {
+      "url": "https://github.com/fyrosofttech/lastroundai-hiring-data/blob/2816bfadd65b7bbec23701dd036bcc7496c729db/ats-directory/lastroundai-ats-company-directory-2026-08.csv",
+      "commit": "2816bfadd65b7bbec23701dd036bcc7496c729db",
+      "lastCrawled": "2026-07-17",
+      "license": "CC BY 4.0"
+    }
+  },
+  {
+    "provider": "ashby",
+    "slug": "notion",
+    "company": "Notion",
+    "boardUrl": "https://jobs.ashbyhq.com/notion",
+    "enabled": false,
+    "provenance": {
+      "url": "https://github.com/fyrosofttech/lastroundai-hiring-data/blob/2816bfadd65b7bbec23701dd036bcc7496c729db/ats-directory/lastroundai-ats-company-directory-2026-08.csv",
+      "commit": "2816bfadd65b7bbec23701dd036bcc7496c729db",
+      "lastCrawled": "2026-07-17",
+      "license": "CC BY 4.0"
+    }
+  },
+  {
+    "provider": "ashby",
+    "slug": "openai",
+    "company": "OpenAI",
+    "boardUrl": "https://jobs.ashbyhq.com/openai",
+    "enabled": false,
+    "provenance": {
+      "url": "https://github.com/fyrosofttech/lastroundai-hiring-data/blob/2816bfadd65b7bbec23701dd036bcc7496c729db/ats-directory/lastroundai-ats-company-directory-2026-08.csv",
+      "commit": "2816bfadd65b7bbec23701dd036bcc7496c729db",
+      "lastCrawled": "2026-07-17",
+      "license": "CC BY 4.0"
+    }
+  },
+  {
+    "provider": "greenhouse",
+    "slug": "anthropic",
+    "company": "Anthropic",
+    "boardUrl": "https://boards.greenhouse.io/anthropic",
+    "enabled": false,
+    "provenance": {
+      "url": "https://github.com/fyrosofttech/lastroundai-hiring-data/blob/2816bfadd65b7bbec23701dd036bcc7496c729db/ats-directory/lastroundai-ats-company-directory-2026-08.csv",
+      "commit": "2816bfadd65b7bbec23701dd036bcc7496c729db",
+      "lastCrawled": "2026-07-17",
+      "license": "CC BY 4.0"
+    }
+  },
+  {
+    "provider": "greenhouse",
+    "slug": "figma",
+    "company": "Figma",
+    "boardUrl": "https://boards.greenhouse.io/figma",
+    "enabled": false,
+    "provenance": {
+      "url": "https://github.com/fyrosofttech/lastroundai-hiring-data/blob/2816bfadd65b7bbec23701dd036bcc7496c729db/ats-directory/lastroundai-ats-company-directory-2026-08.csv",
+      "commit": "2816bfadd65b7bbec23701dd036bcc7496c729db",
+      "lastCrawled": "2026-07-17",
+      "license": "CC BY 4.0"
+    }
+  },
+  {
+    "provider": "greenhouse",
+    "slug": "stripe",
+    "company": "Stripe",
+    "boardUrl": "https://boards.greenhouse.io/stripe",
+    "enabled": false,
+    "provenance": {
+      "url": "https://github.com/fyrosofttech/lastroundai-hiring-data/blob/2816bfadd65b7bbec23701dd036bcc7496c729db/ats-directory/lastroundai-ats-company-directory-2026-08.csv",
+      "commit": "2816bfadd65b7bbec23701dd036bcc7496c729db",
+      "lastCrawled": "2026-07-17",
+      "license": "CC BY 4.0"
+    }
+  }
+]

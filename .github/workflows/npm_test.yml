@@ -31,3 +31,5 @@ jobs:
         run: npm test
       - name: Run isolated PostgreSQL integration tests
         run: yarn test:db
+      - name: Verify collector with isolated PostgreSQL
+        run: yarn test:collection:postgres

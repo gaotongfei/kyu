@@ -8,6 +8,13 @@
       "when": 1795658968333,
       "tag": "0000_resume_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1795677122843,
+      "tag": "20261126071202_job_collection",
+      "breakpoints": true
     }
   ]
 }
